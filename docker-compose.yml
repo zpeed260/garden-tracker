@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  garden-app:
+    build: .
+    container_name: garden-tracker
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - garden-data:/app/data
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  garden-data:
+    driver: local
