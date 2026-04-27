@@ -3,3 +3,5 @@ node_modules/
 *.db
 .worktrees/
 .claude/
+playwright-report/
+tests/e2e/screenshots/
