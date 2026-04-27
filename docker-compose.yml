@@ -1,6 +1,6 @@
 services:
   garden-app:
-    build: https://github.com/zpeed260/garden-tracker.git#master
+    image: ghcr.io/zpeed260/garden-tracker:latest
     container_name: garden-tracker
     restart: unless-stopped
     ports:
