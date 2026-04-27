@@ -160,7 +160,30 @@ test.describe('Garden Tracker — critical user journeys', () => {
     await page.screenshot({ path: SS('05-bed-detail'), fullPage: false });
   });
 
-  // ── 5b. Bed detail — week accordion ──────────────────────────────────────
+  // ── 5b. Bed detail — plant map has crop emoji labels ─────────────────────
+
+  test('bed detail: plant map circles contain crop emoji labels', async ({ page }) => {
+    await page.goto('/');
+    await waitForAppReady(page);
+
+    await page.locator('.nav-tab[data-tab="beds"]').click();
+    await page.waitForSelector('#bed-detail', { timeout: 8_000 });
+
+    // SVG text elements carry the crop emoji; there must be at least one
+    const emojiLabels = page.locator('#bed-detail svg text');
+    await expect(emojiLabels.first()).toBeVisible({ timeout: 6_000 });
+
+    const count = await emojiLabels.count();
+    expect(count).toBeGreaterThan(0);
+
+    // The label must be non-empty (catches the old bug where emojis never rendered)
+    const label = await emojiLabels.first().textContent();
+    expect(label.trim().length).toBeGreaterThan(0);
+
+    await page.screenshot({ path: SS('05b-plant-map-labels'), fullPage: false });
+  });
+
+  // ── 5c. Bed detail — week accordion ──────────────────────────────────────
 
   test('bed detail: week accordion is present', async ({ page }) => {
     await page.goto('/');
@@ -174,7 +197,7 @@ test.describe('Garden Tracker — critical user journeys', () => {
     const weekGroupCount = await weekGroups.count();
     expect(weekGroupCount).toBeGreaterThan(0);
 
-    await page.screenshot({ path: SS('05b-bed-detail-accordion'), fullPage: false });
+    await page.screenshot({ path: SS('05c-bed-detail-accordion'), fullPage: false });
   });
 
   // ── 6. Fertiliser tab ────────────────────────────────────────────────────
