@@ -763,10 +763,10 @@ function buildPlantMap(bed, isFrostLocked) {
       fill="${color}" stroke="${stroke}" stroke-width="${sw}" ${anim}
       onclick="showPlantModal(${plant.id},'${bed.id}')" style="cursor:pointer"/>`;
 
-    if (r > 9) {
-      inner += `<text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle"
-        font-size="${Math.min(r * 0.9, 13).toFixed(0)}" style="pointer-events:none">${emoji}</text>`;
-    }
+    const emojiSize = Math.max(r * 1.15, 8).toFixed(0);
+    inner += `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle"
+      dominant-baseline="central" font-size="${emojiSize}"
+      style="pointer-events:none;user-select:none">${emoji}</text>`;
   }
 
   // Frost lock overlay for bed5
