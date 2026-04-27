@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   garden-app:
-    build: .
+    build: https://github.com/zpeed260/garden-tracker.git#master
     container_name: garden-tracker
     restart: unless-stopped
     ports:
