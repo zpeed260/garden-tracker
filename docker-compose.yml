@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   garden-app:
     build: https://github.com/zpeed260/garden-tracker.git#master
