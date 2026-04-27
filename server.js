@@ -502,6 +502,7 @@ app.use(helmet({
       baseUri: ["'self'"],
       formAction: ["'self'"],
       frameAncestors: ["'self'"],
+      scriptSrcAttr: null,            // app uses inline onclick handlers throughout index.html
       upgradeInsecureRequests: null,  // app runs over plain HTTP on LAN — don't upgrade
     },
   },

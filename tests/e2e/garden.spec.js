@@ -297,9 +297,9 @@ test.describe('Garden Tracker — critical user journeys', () => {
     // Sidebar: left edge at or near 0, not stretching full width
     expect(navBox.width).toBeLessThan(300);
 
-    // All 4 nav tabs visible in sidebar
+    // All 5 nav tabs visible in sidebar (Dashboard, Beds, Fertiliser, AI Analysis, Admin)
     const navTabs = page.locator('.nav-tab');
-    await expect(navTabs).toHaveCount(4);
+    await expect(navTabs).toHaveCount(5);
 
     // Verify switching still works on desktop
     await page.locator('.nav-tab[data-tab="beds"]').click();
