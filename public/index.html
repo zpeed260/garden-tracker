@@ -22,10 +22,11 @@
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:focus-visible{outline:2px solid var(--green-mid);outline-offset:2px;border-radius:4px}
 
 html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;color:#2a2a2a;overscroll-behavior:none}
 
-#app{display:flex;flex-direction:column;height:100dvh;height:100vh;max-width:480px;margin:0 auto;position:relative}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:480px;margin:0 auto;position:relative}
 
 #content{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:var(--cream);padding-bottom:8px}
 
@@ -34,7 +35,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 
 /* ── Bottom Nav ── */
 #bottom-nav{display:flex;height:var(--nav-h);background:#fff;border-top:1px solid rgba(0,0,0,0.1);box-shadow:0 -2px 8px rgba(0,0,0,0.08);position:sticky;bottom:0;z-index:100;flex-shrink:0}
-.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;font-size:10px;color:#888;cursor:pointer;padding:4px 2px;-webkit-tap-highlight-color:transparent;transition:color 0.15s}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;font-size:10px;font-weight:600;color:#888;cursor:pointer;padding:4px 2px;-webkit-tap-highlight-color:transparent;transition:color 0.15s}
 .nav-tab .nav-icon{font-size:20px;line-height:1}
 .nav-tab.active{color:var(--green-dark);font-weight:600}
 .nav-tab.active .nav-icon{transform:scale(1.1)}
@@ -55,13 +56,15 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .fert-instructions{font-size:11px;opacity:0.75;margin-top:2px}
 .apply-all-btn{background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:#fff;font-weight:600;font-size:12px;padding:8px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 .apply-all-btn:disabled{opacity:0.5}
+.apply-all-btn:hover:not(:disabled){background:rgba(255,255,255,0.38)}
 
 /* ── Beds grid ── */
 .beds-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .bed-card{background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);cursor:pointer;-webkit-tap-highlight-color:transparent;border:1px solid rgba(0,0,0,0.05)}
 .bed-card:active{transform:scale(0.98)}
+.bed-card:hover{box-shadow:0 4px 14px rgba(0,0,0,0.16);transform:translateY(-1px)}
 .bed-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
-.bed-card-name{font-size:11px;font-weight:600;color:#444;line-height:1.2}
+.bed-card-name{font-size:11px;font-weight:600;color:#2a2a2a;line-height:1.2}
 .status-dot{font-size:14px;flex-shrink:0}
 .bed-card-mid{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .crop-emojis{font-size:18px;line-height:1}
@@ -86,6 +89,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .bed-pill.general{background:#e0dbd0;color:#555}
 .completed-time{font-size:10px;color:#999}
 .undo-btn{background:none;border:1px solid #ccc;color:#888;font-size:11px;padding:4px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;flex-shrink:0;align-self:center}
+.undo-btn:hover{background:var(--cream-dark);border-color:#aaa;color:#555}
 .empty-state{font-size:13px;color:#aaa;text-align:center;padding:16px 0;font-style:italic}
 
 /* ── Bed selector ── */
@@ -93,6 +97,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .bed-selector::-webkit-scrollbar{display:none}
 .bed-pill-btn{flex-shrink:0;background:#e8e0d0;border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:600;color:#555;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background 0.15s,color 0.15s}
 .bed-pill-btn.active{background:var(--green-dark);color:#fff}
+.bed-pill-btn:hover:not(.active){background:var(--cream-dark);color:#2a2a2a}
 
 /* ── Plant map ── */
 .plant-map-container{margin-bottom:16px}
@@ -127,6 +132,10 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .week-group-body{background:#fff;border-top:1px solid rgba(0,0,0,0.05)}
 .week-group.collapsed .week-group-body{display:none}
 .week-group.current-week .week-group-header{background:var(--cream-dark)}
+.week-group-header:hover{background:var(--cream-dark)}
+.week-group.current-week .week-group-header:hover{background:#ddd8c8}
+button.week-group-header{border:none;width:100%;text-align:left;font:inherit}
+button.analysis-hist-header{border:none;width:100%;text-align:left;font:inherit;background:#fff}
 
 /* ── Notes ── */
 .notes-section{margin-bottom:16px}
@@ -134,7 +143,8 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .notes-textarea{flex:1;border:1px solid #d0c8ba;border-radius:var(--radius);padding:10px;font-size:14px;font-family:inherit;background:#fff;resize:none;min-height:60px;color:#2a2a2a}
 .notes-textarea:focus{outline:none;border-color:var(--green-mid)}
 .save-note-btn{background:var(--green-dark);color:#fff;border:none;border-radius:var(--radius);padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;align-self:flex-end;-webkit-tap-highlight-color:transparent}
-.note-item{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:6px;border-left:3px solid var(--green-light)}
+.save-note-btn:hover{background:var(--green-mid)}
+.note-item{background:#f8fdf5;border-radius:8px;padding:10px 12px;margin-bottom:6px;border:1px solid rgba(168,216,120,0.35)}
 .note-content{font-size:14px;line-height:1.4;margin-bottom:4px}
 .note-date{font-size:11px;color:#aaa}
 
@@ -151,6 +161,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .analysis-score-badge.low{background:var(--red-dark)}
 .analysis-hist-body{padding:12px;border-top:1px solid rgba(0,0,0,0.05);display:none}
 .analysis-hist-card.expanded .analysis-hist-body{display:block}
+.analysis-hist-header:hover{background:var(--cream)}
 
 /* ── Fertiliser tab ── */
 .fert-current-card{background:var(--green-dark);color:#fff;border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
@@ -162,8 +173,9 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .fert-bed-row:last-child{border-bottom:none}
 .fert-bed-name{flex:1;font-size:14px;font-weight:600}
 .fert-last-applied{font-size:11px;color:#999}
-.apply-btn{background:var(--green-mid);color:#fff;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap}
+.apply-btn{background:var(--green-mid);color:#fff;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap;transition:background 0.15s}
 .apply-btn:disabled{background:#ccc;cursor:default}
+.apply-btn:hover:not(:disabled){background:var(--green-dark)}
 .rotation-calendar{background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);margin-bottom:16px}
 .rotation-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.05)}
 .rotation-row:last-child{border-bottom:none}
@@ -190,6 +202,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .preview-img{width:100%;max-height:240px;object-fit:cover;border-radius:var(--radius);display:block;margin-bottom:10px;box-shadow:var(--shadow)}
 .analyse-btn{width:100%;background:var(--green-dark);color:#fff;border:none;border-radius:var(--radius);padding:14px;font-size:16px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity 0.15s}
 .analyse-btn:disabled{opacity:0.5;cursor:default}
+.analyse-btn:hover:not(:disabled){opacity:0.88}
 .spinner-overlay{display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:12px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:40px;height:40px;border:3px solid var(--cream-dark);border-top-color:var(--green-dark);border-radius:50%;animation:spin 0.8s linear infinite}
@@ -219,8 +232,8 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .analysis-error{background:#fde8e8;border:1px solid rgba(139,26,26,0.2);color:var(--red-dark);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:12px;display:none}
 
 /* ── Modal ── */
-#modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;-webkit-tap-highlight-color:transparent}
-#modal-backdrop.active{display:block}
+#modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;-webkit-tap-highlight-color:transparent;opacity:0;pointer-events:none;transition:opacity 0.2s}
+#modal-backdrop.active{opacity:1;pointer-events:auto}
 #modal-sheet{position:fixed;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);width:100%;max-width:480px;background:#fff;border-radius:16px 16px 0 0;z-index:201;transition:transform 0.28s cubic-bezier(0.34,1.1,0.64,1);max-height:80vh;overflow-y:auto}
 #modal-sheet.active{transform:translateX(-50%) translateY(0)}
 #modal-handle{width:40px;height:4px;background:#ddd;border-radius:2px;margin:12px auto 4px}
@@ -246,6 +259,10 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .bed-detail{animation:fadein 0.2s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .bed-title{font-size:18px;font-weight:700;margin-bottom:14px;color:var(--green-dark)}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:0.01ms!important;animation-duration:0.01ms!important;animation-iteration-count:1!important}
+}
 
 /* ── Desktop layout (mobile-first: everything above is the default) ── */
 @media(min-width:768px){
@@ -289,7 +306,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
     <section id="tab-fertiliser" class="tab-content"></section>
     <section id="tab-analysis" class="tab-content"></section>
   </div>
-  <nav id="bottom-nav">
+  <nav id="bottom-nav" aria-label="Main navigation">
     <button class="nav-tab active" data-tab="dashboard" onclick="switchTab('dashboard')">
       <span class="nav-icon">🏠</span><span>Dashboard</span>
     </button>
@@ -305,7 +322,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
   </nav>
 </div>
 <div id="modal-backdrop" onclick="closeModal()"></div>
-<div id="modal-sheet">
+<div id="modal-sheet" role="dialog" aria-modal="true">
   <div id="modal-handle"></div>
   <div id="modal-content"></div>
 </div>
@@ -893,11 +910,11 @@ function buildBedTaskGroups(tasks, currentWeek) {
     const isExpanded = isCurrent || w >= currentWeek;
 
     return `<div class="week-group ${isExpanded ? 'expanded' : 'collapsed'} ${isCurrent ? 'current-week' : ''}" id="wg-${w}">
-      <div class="week-group-header" onclick="toggleWeekGroup(${w})">
+      <button class="week-group-header" onclick="toggleWeekGroup(${w})">
         <span class="week-label">Week ${w}</span>
         <span class="week-progress">${done}/${wTasks.length} done</span>
         <span class="chevron">${isExpanded ? '▼' : '▶'}</span>
-      </div>
+      </button>
       <div class="week-group-body" style="padding:0 12px">
         ${wTasks.map(t => buildTaskRow(t)).join('')}
       </div>
@@ -987,14 +1004,14 @@ function buildAnalysisHistory(analyses) {
     const scoreCls = score >= 7 ? '' : score >= 4 ? 'mid' : 'low';
 
     return `<div class="analysis-hist-card" id="ahc-${idx}">
-      <div class="analysis-hist-header" onclick="toggleAnalysisCard(${idx})">
+      <button class="analysis-hist-header" onclick="toggleAnalysisCard(${idx})">
         <span class="analysis-hist-icon">📷</span>
         <div class="analysis-hist-meta">
           <div class="analysis-hist-date">${fmtDateTime(a.created_at)}</div>
           <div class="analysis-hist-summary">${escHtml(result.health_summary || '')}</div>
         </div>
         <span class="analysis-score-badge ${scoreCls}">${score}/10</span>
-      </div>
+      </button>
       <div class="analysis-hist-body">
         ${buildResultBody(result)}
       </div>

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-27T00:00:00Z",
+  "title": "Design System: Garden Tracker",
+  "extensions": {
+    "colorMeta": {
+      "bed-soil-green":    { "role": "primary",   "displayName": "Deep Bed Soil Green",  "canonical": "oklch(40% 0.09 140)", "tonalRamp": ["#1a3017","#243f20","#2d5229","#3d6b35","#4f8645","#6aaa5c","#93ce7e","#c5e8ae"] },
+      "seedling-green":    { "role": "primary",   "displayName": "Seedling Green",       "canonical": "oklch(54% 0.10 140)", "tonalRamp": ["#243017","#304220","#3e5c2c","#5a8f4a","#72b05e","#92cc7a","#b8e09f","#d8f0c5"] },
+      "fresh-leaf":        { "role": "tertiary",  "displayName": "Fresh Leaf",           "canonical": "oklch(79% 0.12 135)", "tonalRamp": ["#2d5e1a","#3c7a23","#54a033","#72c64a","#8dd862","#a8d878","#c3e89a","#dff4c2"] },
+      "weathered-linen":   { "role": "neutral",   "displayName": "Weathered Linen",      "canonical": "oklch(95% 0.01 85)",  "tonalRamp": ["#3a3530","#544e47","#706860","#8c847a","#a8a098","#c4bcb4","#dedad4","#f5f0e8"] },
+      "aged-canvas":       { "role": "neutral",   "displayName": "Aged Canvas",          "canonical": "oklch(90% 0.01 85)",  "tonalRamp": ["#342f2a","#4a4440","#615a54","#79726c","#918b85","#aca5a0","#c8c2bc","#e8e0d0"] },
+      "harvest-amber":     { "role": "secondary", "displayName": "Harvest Amber",        "canonical": "oklch(60% 0.14 65)",  "tonalRamp": ["#4a2800","#6e3c00","#935400","#b86a00","#d4860a","#e8a832","#f5c85c","#fde68a"] },
+      "root-rot-red":      { "role": "tertiary",  "displayName": "Root Rot Red",         "canonical": "oklch(32% 0.10 22)",  "tonalRamp": ["#2a0000","#440808","#621414","#8b1a1a","#b52828","#d84040","#ee7878","#f9b8b8"] },
+      "garden-soil-brown": { "role": "neutral",   "displayName": "Garden Soil Brown",    "canonical": "oklch(38% 0.06 50)",  "tonalRamp": ["#1e0e04","#341806","#502808","#6b4c2a","#89684a","#a8866a","#c8aa8e","#e4ceb4"] },
+      "body-ink":          { "role": "neutral",   "displayName": "Body Ink",             "canonical": "oklch(22% 0.00 0)",   "tonalRamp": ["#0a0a0a","#141414","#1e1e1e","#2a2a2a","#404040","#606060","#909090","#c0c0c0"] },
+      "muted-stone":       { "role": "neutral",   "displayName": "Muted Stone",          "canonical": "oklch(58% 0.00 0)",   "tonalRamp": ["#1c1c1c","#303030","#484848","#646464","#888888","#a4a4a4","#c0c0c0","#dedede"] }
+    },
+    "typographyMeta": {
+      "body":  { "displayName": "Body",          "purpose": "Task titles, notes, descriptions. The primary reading text." },
+      "title": { "displayName": "Title",         "purpose": "Bed names, modal headers, page headings. One per screen region." },
+      "label": { "displayName": "Label / Badge", "purpose": "Stage badges, week badges, bed pills, timestamps. Semi-bold for legibility at small size outdoors." },
+      "task":  { "displayName": "Task Body",     "purpose": "Task title text in task rows. 14px body weight for comfortable outdoor reading." }
+    },
+    "shadows": [
+      { "name": "surface",  "value": "0 2px 8px rgba(0,0,0,0.12)",  "purpose": "Cards, week groups, fertiliser cards, bed detail panel. The standard raised-surface treatment." },
+      { "name": "nav-top",  "value": "0 -2px 8px rgba(0,0,0,0.08)", "purpose": "Mobile bottom nav bar — separates persistent nav from scrolling content." },
+      { "name": "nav-side", "value": "2px 0 8px rgba(0,0,0,0.05)",  "purpose": "Desktop sidebar — lighter because the sidebar is infrastructure, not a focal element." },
+      { "name": "toast",    "value": "0 4px 12px rgba(0,0,0,0.2)",  "purpose": "Toast notifications. Heavier shadow communicates transient elevation above all content." }
+    ],
+    "motion": [
+      { "name": "state-change",  "value": "0.15s ease",                          "purpose": "Color and background transitions on buttons, pills, checkboxes." },
+      { "name": "entrance",      "value": "0.2s ease",                           "purpose": "Fade + translateY(8px) entrance for bed detail content." },
+      { "name": "modal-open",    "value": "0.28s cubic-bezier(0.34, 1.1, 0.64, 1)", "purpose": "Modal sheet slide-up on mobile. Slight overshoot gives physical feel." },
+      { "name": "overdue-pulse", "value": "pulse-overdue 1.4s infinite",         "purpose": "Overdue plant indicators in bed grid. opacity 1 → 0.45 → 1." },
+      { "name": "urgent-pulse",  "value": "pulse-amber 1.8s infinite",           "purpose": "Harvest cards past overdue threshold." }
+    ],
+    "breakpoints": [
+      { "name": "desktop", "value": "768px", "purpose": "Switches from bottom-nav mobile layout to left-sidebar desktop layout." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Full-width action button. Used for Analyse, Save Note, Apply All Fertiliser.",
+      "html": "<button class=\"ds-btn-primary\">Analyse Bed</button>",
+      "css": ".ds-btn-primary { display: block; width: 100%; background: #3d6b35; color: #f5f0e8; border: none; border-radius: 10px; padding: 14px 16px; font-size: 16px; font-weight: 700; font-family: system-ui, -apple-system, sans-serif; cursor: pointer; transition: opacity 0.15s; } .ds-btn-primary:hover { opacity: 0.88; } .ds-btn-primary:disabled { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Apply Button (Pill)",
+      "kind": "button",
+      "refersTo": "button-pill",
+      "description": "Compact pill button used in fertiliser bed rows and dashboard.",
+      "html": "<button class=\"ds-btn-pill\">Apply</button>",
+      "css": ".ds-btn-pill { background: #5a8f4a; color: #fff; border: none; border-radius: 20px; padding: 8px 14px; font-size: 12px; font-weight: 600; font-family: system-ui, -apple-system, sans-serif; cursor: pointer; white-space: nowrap; transition: background 0.15s; } .ds-btn-pill:hover { background: #3d6b35; } .ds-btn-pill:disabled { background: #ccc; cursor: default; }"
+    },
+    {
+      "name": "Bed Selector Pill",
+      "kind": "chip",
+      "refersTo": "pill-active",
+      "description": "Navigation pills for selecting a bed on the Beds and Analysis tabs.",
+      "html": "<div class=\"ds-pill-group\"><button class=\"ds-pill-btn ds-pill-active\">Bed 1</button><button class=\"ds-pill-btn\">Bed 2</button><button class=\"ds-pill-btn\">Bed 3</button></div>",
+      "css": ".ds-pill-group { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; } .ds-pill-btn { flex-shrink: 0; background: #e8e0d0; border: none; border-radius: 20px; padding: 8px 16px; font-size: 13px; font-weight: 600; font-family: system-ui, -apple-system, sans-serif; color: #2a2a2a; cursor: pointer; transition: background 0.15s, color 0.15s; } .ds-pill-btn.ds-pill-active, .ds-pill-btn:hover { background: #3d6b35; color: #f5f0e8; }"
+    },
+    {
+      "name": "Task Checkbox",
+      "kind": "custom",
+      "refersTo": "button-primary",
+      "description": "44x44px circular checkbox. The most-used interactive element — sized for outdoor use with imprecise taps.",
+      "html": "<button class=\"ds-task-check\">✓</button>",
+      "css": ".ds-task-check { min-width: 44px; min-height: 44px; border-radius: 50%; border: 2px solid #5a8f4a; background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; color: #3d6b35; flex-shrink: 0; transition: background 0.15s, color 0.15s; } .ds-task-check.checked { background: #5a8f4a; color: #fff; border-color: #5a8f4a; }"
+    },
+    {
+      "name": "Stage Badge",
+      "kind": "chip",
+      "refersTo": "stage-badge",
+      "description": "Color-coded plant growth stage indicator. Color encodes meaning; text label always present.",
+      "html": "<span class=\"ds-stage-badge ds-stage-growing\">Growing</span>",
+      "css": ".ds-stage-badge { display: inline-block; font-size: 10px; font-weight: 600; color: #fff; padding: 3px 7px; border-radius: 10px; font-family: system-ui, -apple-system, sans-serif; letter-spacing: 0.3px; } .ds-stage-growing { background: #5a8f4a; } .ds-stage-harvest-ready { background: #3d6b35; } .ds-stage-overdue { background: #8b1a1a; } .ds-stage-heading { background: #9b59b6; } .ds-stage-flowering { background: #e67e22; } .ds-stage-seedling { background: #7dba6a; } .ds-stage-germinating { background: #95c47a; } .ds-stage-seeded { background: #aaaaaa; }"
+    },
+    {
+      "name": "Bed Card",
+      "kind": "card",
+      "refersTo": "button-primary",
+      "description": "Grid card for each raised bed. Tappable — navigates to bed detail.",
+      "html": "<div class=\"ds-bed-card\"><div class=\"ds-bed-card-top\"><span class=\"ds-bed-card-name\">Bed 1 — Cauliflower / Beetroot</span><span>🌱</span></div><div class=\"ds-bed-card-mid\"><span style=\"font-size:18px\">🥦🥕</span><span class=\"ds-stage-badge ds-stage-growing\">Growing</span></div></div>",
+      "css": ".ds-bed-card { background: #fff; border-radius: 10px; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); cursor: pointer; border: 1px solid rgba(0,0,0,0.05); transition: transform 0.1s; } .ds-bed-card:active { transform: scale(0.98); } .ds-bed-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; } .ds-bed-card-name { font-size: 11px; font-weight: 600; color: #444; line-height: 1.2; font-family: system-ui, -apple-system, sans-serif; } .ds-bed-card-mid { display: flex; align-items: center; justify-content: space-between; }"
+    },
+    {
+      "name": "Fertiliser Card (Liquid Gold)",
+      "kind": "card",
+      "refersTo": "button-primary",
+      "description": "Gradient identity card for the Vasili's Liquid Gold product. One of two gradient surfaces in the system.",
+      "html": "<div class=\"ds-fert-card ds-fert-gold\"><span class=\"ds-fert-icon\">💧</span><div class=\"ds-fert-info\"><div class=\"ds-fert-label\">This Week</div><div class=\"ds-fert-name\">Vasili's Liquid Gold</div><div class=\"ds-fert-instructions\">Dilute 1:10, apply to root zone</div></div></div>",
+      "css": ".ds-fert-card { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); } .ds-fert-gold { background: linear-gradient(135deg, #1a4a6b, #2a6b9b); } .ds-fert-icon { font-size: 28px; flex-shrink: 0; } .ds-fert-info { flex: 1; color: #fff; } .ds-fert-label { font-size: 11px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; font-family: system-ui, -apple-system, sans-serif; } .ds-fert-name { font-weight: 700; font-size: 16px; font-family: system-ui, -apple-system, sans-serif; } .ds-fert-instructions { font-size: 11px; opacity: 0.75; margin-top: 2px; font-family: system-ui, -apple-system, sans-serif; }"
+    },
+    {
+      "name": "Week Badge",
+      "kind": "chip",
+      "refersTo": "week-badge",
+      "description": "Current season week indicator. Always visible on the Dashboard header.",
+      "html": "<span class=\"ds-week-badge\">Week 1</span>",
+      "css": ".ds-week-badge { display: inline-block; background: #3d6b35; color: #fff; font-weight: 700; font-size: 13px; padding: 3px 10px; border-radius: 20px; font-family: system-ui, -apple-system, sans-serif; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Working Gardener's Notebook",
+    "overview": "This is a tool used standing in a garden. The person using it has dirt on their hands, the sun is out, and they need to know what to do right now. Every design decision flows from that physical reality: high contrast for legibility in direct sunlight, touch targets large enough for imprecise outdoor taps, information density that answers the question without making the user hunt. The aesthetic is a well-kept field notebook — not precious, not decorative, earned through use.\n\nThe palette is drawn directly from the garden it serves: deep soil greens, warm linen backgrounds, amber for urgency, the dull red of a plant in trouble. Nothing is synthetic. The system explicitly rejects the pastel-wellness aesthetic, the chrome-and-glass productivity app, and anything that looks like it was designed to win a design award before being used in a paddock.",
+    "keyCharacteristics": [
+      "High-contrast legibility as a non-negotiable, not a nice-to-have",
+      "Earthy, grounded palette sourced from the subject matter itself",
+      "Generous touch targets (44x44px minimum everywhere)",
+      "Mobile-first with a useful desktop sidebar",
+      "Flat-by-default elevation; shadow used structurally, never decoratively",
+      "System UI font stack — fast, legible, native on every device"
+    ],
+    "rules": [
+      { "name": "The Amber Reservation Rule",    "body": "Amber (#d4860a) is for things that need attention. It is never used for branding, decoration, or positive confirmation. If amber appears on screen, it means the user should act.", "section": "colors" },
+      { "name": "The No-White Rule",             "body": "Pure white (#ffffff) is never used as a background. All surfaces use Weathered Linen (#f5f0e8) or white cards on that canvas.", "section": "colors" },
+      { "name": "The Floor Rule",                "body": "No text below 10px. On a phone in sunlight, 10px semi-bold uppercase is the floor.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule",      "body": "Surfaces rest at ground level. Shadow is earned by function — a card that contains interactive content earns a shadow; a section header does not.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do maintain WCAG AAA contrast for all task titles, bed names, and stage labels.",
+      "Do keep all touch targets at 44x44px minimum.",
+      "Do use Deep Bed Soil Green (#3d6b35) for primary actions and active states only.",
+      "Do reserve Harvest Amber and Root Rot Red for urgency and error states.",
+      "Do keep Weathered Linen (#f5f0e8) as the base canvas.",
+      "Do use the pill shape (20px radius) only for navigation elements and badges.",
+      "Do pair every color-based status signal with a text label or icon."
+    ],
+    "donts": [
+      "Don't use the Better Homes and Gardens aesthetic — no soft pastels, no floral illustration.",
+      "Don't use the wellness or mindfulness app aesthetic — no inspirational copy, no muted mint and blush.",
+      "Don't add gradients except on the two named fertiliser product cards.",
+      "Don't use border-left or border-right greater than 1px as a colored accent stripe on general cards.",
+      "Don't animate layout properties — only opacity, transform, color, and background-color.",
+      "Don't make the app feel like a dashboard. No metric tiles, progress rings, or charts.",
+      "Don't use pure black (#000000) or pure white (#ffffff) for any background or text."
+    ]
+  }
+}
