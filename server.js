@@ -490,7 +490,16 @@ function enrichBed(bed) {
 // ─── Express app ──────────────────────────────────────────────────────────────
 
 const app = express();
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      // App JS lives in inline <script> tags in index.html — unsafe-inline required
+      // until scripts are extracted to a separate file
+      'script-src': ["'self'", "'unsafe-inline'"],
+    },
+  },
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
