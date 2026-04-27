@@ -493,19 +493,32 @@ const app = express();
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      // App JS lives in inline <script> tags in index.html — unsafe-inline required
-      // until scripts are extracted to a separate file
-      'script-src': ["'self'", "'unsafe-inline'"],
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],   // inline JS in index.html
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      upgradeInsecureRequests: null,  // app runs over plain HTTP on LAN — don't upgrade
     },
   },
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Block cross-origin requests — local single-user tool, no cross-origin callers expected
+// Block cross-origin requests — compare Origin against the actual Host to allow
+// same-origin fetch() calls (browsers send Origin even for same-origin requests)
 app.use((req, res, next) => {
-  if (req.get('Origin')) return res.status(403).json({ error: 'Cross-origin requests not allowed' });
+  const origin = req.get('Origin');
+  if (origin) {
+    const host = req.get('Host');
+    if (origin !== `http://${host}` && origin !== `https://${host}`) {
+      return res.status(403).json({ error: 'Cross-origin requests not allowed' });
+    }
+  }
   next();
 });
 
