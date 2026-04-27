@@ -29,11 +29,9 @@ function getCurrentFertiliser() {
   return getFertiliserForWeek(getCurrentWeek());
 }
 
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.error('ANTHROPIC_API_KEY environment variable is required');
-  process.exit(1);
-}
-const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropicClient = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
 
 // ─── Stage computation ────────────────────────────────────────────────────────
 
@@ -573,6 +571,9 @@ app.get('/api/analysis/:bed_id', (req, res) => {
 
 // POST /api/analyse
 app.post('/api/analyse', (req, res) => {
+  if (!anthropicClient) {
+    return res.status(503).json({ error: 'AI analysis unavailable — set ANTHROPIC_API_KEY to enable' });
+  }
   upload(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message });
