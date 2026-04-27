@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Garden Tracker</title>
+<style>
+:root {
+  --green-dark: #3d6b35;
+  --green-mid: #5a8f4a;
+  --green-light: #a8d878;
+  --brown: #6b4c2a;
+  --cream: #f5f0e8;
+  --cream-dark: #e8e0d0;
+  --amber: #d4860a;
+  --red-dark: #8b1a1a;
+  --nav-h: 64px;
+  --radius: 10px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;color:#2a2a2a;overscroll-behavior:none}
+
+#app{display:flex;flex-direction:column;height:100dvh;height:100vh;max-width:480px;margin:0 auto;position:relative}
+
+#content{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:var(--cream);padding-bottom:8px}
+
+.tab-content{display:none;padding:12px 12px 16px}
+.tab-content.active{display:block}
+
+/* ── Bottom Nav ── */
+#bottom-nav{display:flex;height:var(--nav-h);background:#fff;border-top:1px solid rgba(0,0,0,0.1);box-shadow:0 -2px 8px rgba(0,0,0,0.08);position:sticky;bottom:0;z-index:100;flex-shrink:0}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;font-size:10px;color:#888;cursor:pointer;padding:4px 2px;-webkit-tap-highlight-color:transparent;transition:color 0.15s}
+.nav-tab .nav-icon{font-size:20px;line-height:1}
+.nav-tab.active{color:var(--green-dark);font-weight:600}
+.nav-tab.active .nav-icon{transform:scale(1.1)}
+
+/* ── Page header ── */
+.page-header{padding:4px 0 12px;border-bottom:1px solid rgba(0,0,0,0.08);margin-bottom:14px}
+.week-badge{display:inline-block;background:var(--green-dark);color:#fff;font-weight:700;font-size:13px;padding:3px 10px;border-radius:20px;margin-bottom:4px}
+.current-date{font-size:12px;color:#666}
+
+/* ── Fertiliser card ── */
+.fertiliser-card{display:flex;align-items:center;gap:12px;padding:14px;border-radius:var(--radius);margin-bottom:16px;box-shadow:var(--shadow)}
+.fertiliser-card.liquid-gold{background:linear-gradient(135deg,#1a4a6b,#2a6b9b)}
+.fertiliser-card.eco-booch{background:linear-gradient(135deg,#3d6b35,#5a8f4a)}
+.fert-icon{font-size:28px;flex-shrink:0}
+.fert-info{flex:1;color:#fff}
+.fert-label{font-size:11px;opacity:0.8;text-transform:uppercase;letter-spacing:0.5px}
+.fert-name{font-weight:700;font-size:16px}
+.fert-instructions{font-size:11px;opacity:0.75;margin-top:2px}
+.apply-all-btn{background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.5);color:#fff;font-weight:600;font-size:12px;padding:8px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.apply-all-btn:disabled{opacity:0.5}
+
+/* ── Beds grid ── */
+.beds-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.bed-card{background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);cursor:pointer;-webkit-tap-highlight-color:transparent;border:1px solid rgba(0,0,0,0.05)}
+.bed-card:active{transform:scale(0.98)}
+.bed-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.bed-card-name{font-size:11px;font-weight:600;color:#444;line-height:1.2}
+.status-dot{font-size:14px;flex-shrink:0}
+.bed-card-mid{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.crop-emojis{font-size:18px;line-height:1}
+.stage-badge{font-size:10px;font-weight:600;color:#fff;padding:3px 7px;border-radius:10px;text-align:center;margin-top:4px}
+
+/* ── Section labels ── */
+.section-label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green-dark);margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid var(--green-light)}
+.section-label.amber{color:var(--amber);border-bottom-color:#f5c842}
+
+/* ── Task rows ── */
+.overdue-section{background:rgba(212,134,10,0.08);border:1px solid rgba(212,134,10,0.2);border-radius:var(--radius);padding:12px;margin-bottom:16px}
+.current-section{background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
+.task-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.05)}
+.task-row:last-child{border-bottom:none}
+.task-row.completed .task-title{text-decoration:line-through;color:#aaa}
+.task-checkbox{min-width:44px;min-height:44px;border-radius:50%;border:2px solid var(--green-mid);background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:var(--green-dark);flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:background 0.15s,color 0.15s}
+.task-checkbox.checked{background:var(--green-mid);color:#fff;border-color:var(--green-mid)}
+.task-content{flex:1;min-width:0}
+.task-title{font-size:14px;line-height:1.35;color:#2a2a2a}
+.task-meta{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center}
+.bed-pill{font-size:10px;font-weight:600;background:var(--green-light);color:var(--green-dark);padding:2px 7px;border-radius:10px}
+.bed-pill.general{background:#e0dbd0;color:#555}
+.completed-time{font-size:10px;color:#999}
+.undo-btn{background:none;border:1px solid #ccc;color:#888;font-size:11px;padding:4px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;flex-shrink:0;align-self:center}
+.empty-state{font-size:13px;color:#aaa;text-align:center;padding:16px 0;font-style:italic}
+
+/* ── Bed selector ── */
+.bed-selector{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;scrollbar-width:none}
+.bed-selector::-webkit-scrollbar{display:none}
+.bed-pill-btn{flex-shrink:0;background:#e8e0d0;border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:600;color:#555;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background 0.15s,color 0.15s}
+.bed-pill-btn.active{background:var(--green-dark);color:#fff}
+
+/* ── Plant map ── */
+.plant-map-container{margin-bottom:16px}
+.plant-map-svg{width:100%;border-radius:var(--radius);box-shadow:var(--shadow);display:block}
+.plant-circle{transition:opacity 0.15s}
+.plant-circle:active{opacity:0.7}
+@keyframes pulse-overdue{0%,100%{opacity:1}50%{opacity:0.45}}
+.overdue-pulse{animation:pulse-overdue 1.4s infinite}
+
+/* ── Harvest countdown ── */
+.harvest-countdown{margin-bottom:16px}
+.harvest-cards{display:flex;flex-direction:column;gap:8px}
+.harvest-card{display:flex;align-items:center;gap:10px;background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);border-left:4px solid var(--green-mid)}
+.harvest-card.soon-card{border-left-color:var(--amber)}
+.harvest-card.ready-card{border-left-color:var(--green-dark);background:#f0f8ee}
+.harvest-card.overdue-card{border-left-color:var(--red-dark);background:#fdf0f0}
+@keyframes pulse-amber{0%,100%{opacity:1}50%{opacity:0.6}}
+.harvest-card.overdue-card{animation:pulse-amber 1.8s infinite}
+.harvest-icon{font-size:24px;flex-shrink:0}
+.harvest-name{font-weight:600;font-size:14px;margin-bottom:2px}
+.days-label,.soon-label,.ready-label,.overdue-label{font-size:13px}
+.soon-label{color:var(--amber);font-weight:600}
+.ready-label{color:var(--green-dark);font-weight:700}
+.overdue-label{color:var(--red-dark);font-weight:700}
+
+/* ── Week groups (bed tasks) ── */
+.week-group{margin-bottom:8px;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.week-group-header{display:flex;align-items:center;gap:8px;background:#fff;padding:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.week-label{font-weight:700;font-size:14px;flex:1}
+.week-progress{font-size:12px;color:#888}
+.chevron{font-size:12px;color:#888;flex-shrink:0}
+.week-group-body{background:#fff;border-top:1px solid rgba(0,0,0,0.05)}
+.week-group.collapsed .week-group-body{display:none}
+.week-group.current-week .week-group-header{background:var(--cream-dark)}
+
+/* ── Notes ── */
+.notes-section{margin-bottom:16px}
+.notes-form{display:flex;gap:8px;margin-bottom:10px}
+.notes-textarea{flex:1;border:1px solid #d0c8ba;border-radius:var(--radius);padding:10px;font-size:14px;font-family:inherit;background:#fff;resize:none;min-height:60px;color:#2a2a2a}
+.notes-textarea:focus{outline:none;border-color:var(--green-mid)}
+.save-note-btn{background:var(--green-dark);color:#fff;border:none;border-radius:var(--radius);padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;align-self:flex-end;-webkit-tap-highlight-color:transparent}
+.note-item{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:6px;border-left:3px solid var(--green-light)}
+.note-content{font-size:14px;line-height:1.4;margin-bottom:4px}
+.note-date{font-size:11px;color:#aaa}
+
+/* ── Analysis history cards ── */
+.analysis-history-section{margin-bottom:16px}
+.analysis-hist-card{background:#fff;border-radius:var(--radius);margin-bottom:8px;box-shadow:var(--shadow);overflow:hidden}
+.analysis-hist-header{display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.analysis-hist-icon{font-size:22px;flex-shrink:0}
+.analysis-hist-meta{flex:1;min-width:0}
+.analysis-hist-date{font-size:12px;color:#888}
+.analysis-hist-summary{font-size:13px;font-weight:600;line-height:1.3}
+.analysis-score-badge{background:var(--green-mid);color:#fff;font-weight:700;font-size:12px;padding:4px 8px;border-radius:8px;flex-shrink:0}
+.analysis-score-badge.mid{background:var(--amber)}
+.analysis-score-badge.low{background:var(--red-dark)}
+.analysis-hist-body{padding:12px;border-top:1px solid rgba(0,0,0,0.05);display:none}
+.analysis-hist-card.expanded .analysis-hist-body{display:block}
+
+/* ── Fertiliser tab ── */
+.fert-current-card{background:var(--green-dark);color:#fff;border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
+.fert-current-title{font-size:12px;opacity:0.75;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.fert-current-product{font-size:22px;font-weight:700;margin-bottom:6px}
+.fert-current-instructions{font-size:13px;opacity:0.85;line-height:1.4}
+.fert-bed-list{background:#fff;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin-bottom:16px}
+.fert-bed-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(0,0,0,0.06)}
+.fert-bed-row:last-child{border-bottom:none}
+.fert-bed-name{flex:1;font-size:14px;font-weight:600}
+.fert-last-applied{font-size:11px;color:#999}
+.apply-btn{background:var(--green-mid);color:#fff;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap}
+.apply-btn:disabled{background:#ccc;cursor:default}
+.rotation-calendar{background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);margin-bottom:16px}
+.rotation-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.05)}
+.rotation-row:last-child{border-bottom:none}
+.rotation-week{font-size:12px;font-weight:700;min-width:52px;color:#555}
+.rotation-product{font-size:12px}
+.rotation-product.gold{color:#1a5080;font-weight:600}
+.rotation-product.booch{color:var(--green-dark);font-weight:600}
+.rotation-current{background:var(--cream-dark);border-radius:6px;padding:2px 6px}
+.fert-history-section{margin-bottom:16px}
+.fert-history-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);font-size:13px}
+.fert-history-item:last-child{border-bottom:none}
+.fert-history-product{font-weight:600;color:var(--green-dark)}
+.fert-history-date{color:#999;font-size:11px}
+
+/* ── AI Analysis tab ── */
+.analysis-bed-selector{margin-bottom:14px}
+.upload-zone{border:2px dashed #c0b8a8;border-radius:var(--radius);padding:28px 20px;text-align:center;background:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color 0.15s,background 0.15s;margin-bottom:16px}
+.upload-zone:active,.upload-zone.has-file{border-color:var(--green-mid);background:var(--cream)}
+.upload-icon{font-size:40px;display:block;margin-bottom:8px}
+.upload-label{font-size:15px;font-weight:600;color:#555;display:block;margin-bottom:4px}
+.upload-sub{font-size:12px;color:#aaa}
+#file-input{display:none}
+.preview-section{margin-bottom:16px;display:none}
+.preview-img{width:100%;max-height:240px;object-fit:cover;border-radius:var(--radius);display:block;margin-bottom:10px;box-shadow:var(--shadow)}
+.analyse-btn{width:100%;background:var(--green-dark);color:#fff;border:none;border-radius:var(--radius);padding:14px;font-size:16px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity 0.15s}
+.analyse-btn:disabled{opacity:0.5;cursor:default}
+.spinner-overlay{display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:40px;height:40px;border:3px solid var(--cream-dark);border-top-color:var(--green-dark);border-radius:50%;animation:spin 0.8s linear infinite}
+.spinner-label{font-size:14px;color:#666}
+.analysis-result{display:none;margin-bottom:16px}
+.urgent-banner{background:var(--red-dark);color:#fff;border-radius:var(--radius);padding:12px 16px;font-weight:700;font-size:14px;margin-bottom:12px;text-align:center}
+@keyframes pulse-urgent{0%,100%{opacity:1}50%{opacity:0.7}}
+.urgent-banner.pulse{animation:pulse-urgent 1.2s infinite}
+.result-card{background:#fff;border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.result-dial-section{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(0,0,0,0.07)}
+.result-health-text{flex:1}
+.health-label{font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:4px}
+.health-summary{font-size:14px;font-weight:600;line-height:1.4;color:#2a2a2a}
+.result-row{margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.result-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#666;margin-bottom:6px;display:block}
+.result-section{margin-bottom:14px}
+.stage-badge-sm{background:var(--green-mid);color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px}
+.badge{font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px}
+.badge.green{background:#e0f0d8;color:var(--green-dark)}
+.badge.amber{background:#fdf0d0;color:var(--amber)}
+.issues-list{display:flex;flex-wrap:wrap;gap:6px}
+.issue-badge{background:#fde8e8;color:var(--red-dark);font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;border:1px solid rgba(139,26,26,0.15)}
+.no-issues{font-size:13px;color:#5a8f4a;font-style:italic}
+.harvest-est{font-size:15px;font-weight:600;color:var(--green-dark)}
+.rec-list{padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.rec-list li{font-size:14px;line-height:1.4}
+.analysis-error{background:#fde8e8;border:1px solid rgba(139,26,26,0.2);color:var(--red-dark);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:12px;display:none}
+
+/* ── Modal ── */
+#modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;-webkit-tap-highlight-color:transparent}
+#modal-backdrop.active{display:block}
+#modal-sheet{position:fixed;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);width:100%;max-width:480px;background:#fff;border-radius:16px 16px 0 0;z-index:201;transition:transform 0.28s cubic-bezier(0.34,1.1,0.64,1);max-height:80vh;overflow-y:auto}
+#modal-sheet.active{transform:translateX(-50%) translateY(0)}
+#modal-handle{width:40px;height:4px;background:#ddd;border-radius:2px;margin:12px auto 4px}
+#modal-content{padding:12px 18px 32px}
+.modal-plant-header{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(0,0,0,0.07)}
+.modal-plant-emoji{font-size:36px}
+.modal-plant-name{font-size:18px;font-weight:700}
+.modal-plant-variety{font-size:13px;color:#888}
+.modal-stage-badge{display:inline-block;color:#fff;font-weight:700;font-size:13px;padding:5px 14px;border-radius:20px;margin-bottom:16px}
+.modal-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-stat{background:var(--cream);border-radius:8px;padding:12px}
+.modal-stat-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px}
+.modal-stat-value{font-size:18px;font-weight:700;color:var(--green-dark)}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:calc(var(--nav-h) + 10px);left:50%;transform:translateX(-50%) translateY(12px);background:var(--green-dark);color:#fff;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity 0.2s,transform 0.2s;z-index:300;pointer-events:none;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Loading ── */
+.loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:50vh;gap:14px;color:#888}
+
+/* ── Bed detail ── */
+.bed-detail{animation:fadein 0.2s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.bed-title{font-size:18px;font-weight:700;margin-bottom:14px;color:var(--green-dark)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="content">
+    <section id="tab-dashboard" class="tab-content active"></section>
+    <section id="tab-beds" class="tab-content"></section>
+    <section id="tab-fertiliser" class="tab-content"></section>
+    <section id="tab-analysis" class="tab-content"></section>
+  </div>
+  <nav id="bottom-nav">
+    <button class="nav-tab active" data-tab="dashboard" onclick="switchTab('dashboard')">
+      <span class="nav-icon">🏠</span><span>Dashboard</span>
+    </button>
+    <button class="nav-tab" data-tab="beds" onclick="switchTab('beds')">
+      <span class="nav-icon">🛏</span><span>Beds</span>
+    </button>
+    <button class="nav-tab" data-tab="fertiliser" onclick="switchTab('fertiliser')">
+      <span class="nav-icon">💧</span><span>Fertiliser</span>
+    </button>
+    <button class="nav-tab" data-tab="analysis" onclick="switchTab('analysis')">
+      <span class="nav-icon">📷</span><span>AI Analysis</span>
+    </button>
+  </nav>
+</div>
+<div id="modal-backdrop" onclick="closeModal()"></div>
+<div id="modal-sheet">
+  <div id="modal-handle"></div>
+  <div id="modal-content"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+
+const STAGE_COLORS = {
+  SEEDED: '#d4cfc4',
+  GERMINATING: '#f5c842',
+  SEEDLING: '#a8d878',
+  GROWING: '#5a8f4a',
+  HEADING: '#9b59b6',
+  FLOWERING: '#c080c0',
+  HARVEST_READY: '#e06020',
+  OVERDUE: '#8b1a1a'
+};
+
+const STAGE_LABELS = {
+  SEEDED: 'Seeded',
+  GERMINATING: 'Germinating',
+  SEEDLING: 'Seedling',
+  GROWING: 'Growing',
+  HEADING: 'Heading',
+  FLOWERING: 'Flowering',
+  HARVEST_READY: 'Harvest Ready',
+  OVERDUE: 'Overdue'
+};
+
+const CROP_EMOJIS = {
+  'Cauliflower': '🥦',
+  'Beetroot': '🍠',
+  'Broad Bean': '🫘',
+  'Carrot': '🥕',
+  'Lettuce': '🥬',
+  'Sugar Pea': '🫛',
+  'Spinach/Silverbeet/Kale': '🥗',
+  'Climbing Bean': '🌱'
+};
+
+const TRELLIS_BEDS = new Set(['bed2', 'bed4', 'bed5']);
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+
+let appState = null;
+let fertiliserState = null;
+let currentTab = 'dashboard';
+let currentBedId = 'bed1';
+let analysisBedId = 'bed1';
+let analysisFile = null;
+let analysisBlobUrl = null;
+let bedTasksCache = {};
+let bedNotesCache = {};
+let bedAnalysisCache = {};
+
+// ═══════════════════════════════════════════════════════════════
+// API HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(e.error || 'Request failed');
+  }
+  return r.json();
+}
+
+function postJSON(url, body) {
+  return fetchJSON(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+
+let toastTimer = null;
+function showToast(msg, ms) {
+  clearTimeout(toastTimer);
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms || 2200);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════════
+
+function showModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-backdrop').classList.add('active');
+  document.getElementById('modal-sheet').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('active');
+  document.getElementById('modal-sheet').classList.remove('active');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORMATTING
+// ═══════════════════════════════════════════════════════════════
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) + ' ' +
+    d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TAB MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelector('.nav-tab[data-tab="' + tab + '"]').classList.add('active');
+  document.getElementById('content').scrollTop = 0;
+
+  if (tab === 'dashboard') renderDashboard();
+  else if (tab === 'beds') renderBeds();
+  else if (tab === 'fertiliser') loadAndRenderFertiliser();
+  else if (tab === 'analysis') renderAnalysisTab();
+}
+
+function selectBedAndSwitch(bedId) {
+  currentBedId = bedId;
+  switchTab('beds');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD TAB
+// ═══════════════════════════════════════════════════════════════
+
+function renderDashboard() {
+  const s = appState;
+  if (!s) return;
+
+  const week = s.currentWeek;
+  const dateStr = new Date(s.currentDate + 'T12:00:00').toLocaleDateString('en-AU', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+  const fert = s.fertiliser;
+  const isGold = fert.includes('Liquid Gold');
+
+  const bedCardsHtml = s.beds.map(bed => buildBedCard(bed, s)).join('');
+
+  const overdueTasks = s.tasks.overdue;
+  const currentTasks = s.tasks.current;
+
+  const overdueHtml = overdueTasks.length > 0 ? `
+    <div class="overdue-section">
+      <div class="section-label amber">⚠ Overdue Tasks (${overdueTasks.length})</div>
+      ${overdueTasks.map(t => buildTaskRow(t)).join('')}
+    </div>` : '';
+
+  document.getElementById('tab-dashboard').innerHTML = `
+    <div class="page-header">
+      <div class="week-badge">Week ${week}</div>
+      <div class="current-date">${dateStr}</div>
+    </div>
+    <div class="fertiliser-card ${isGold ? 'liquid-gold' : 'eco-booch'}">
+      <div class="fert-icon">${isGold ? '🌊' : '🍵'}</div>
+      <div class="fert-info">
+        <div class="fert-label">This week</div>
+        <div class="fert-name">${fert}</div>
+        <div class="fert-instructions">Apply diluted to root zone — not foliar spray in winter</div>
+      </div>
+      <button class="apply-all-btn" id="apply-all-btn" onclick="applyFertiliserAll()">Apply All</button>
+    </div>
+    <div class="beds-grid">${bedCardsHtml}</div>
+    ${overdueHtml}
+    <div class="current-section">
+      <div class="section-label">Week ${week} Tasks</div>
+      ${currentTasks.length ? currentTasks.map(t => buildTaskRow(t)).join('') : '<div class="empty-state">No tasks this week</div>'}
+    </div>`;
+}
+
+function buildBedCard(bed, s) {
+  const primaryPlant = bed.plants[0];
+  const stage = primaryPlant ? primaryPlant.stage : 'SEEDED';
+  const stageColor = STAGE_COLORS[stage] || '#ccc';
+  const stageLabel = STAGE_LABELS[stage] || stage;
+
+  const uniqueNames = [...new Set(bed.plants.map(p => p.name))];
+  const emojis = uniqueNames.map(n => CROP_EMOJIS[n] || '🌱').join('');
+
+  // Completion ring from taskSummary
+  const ts = s.taskSummary && s.taskSummary[bed.id];
+  const total = ts ? ts.total : 0;
+  const done = ts ? ts.completed : 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  // Status dot
+  const hasOverdue = s.tasks.overdue.some(t => t.bed_id === bed.id);
+  const hasPending = s.tasks.current.some(t => t.bed_id === bed.id && !t.is_complete);
+  const dot = hasOverdue ? '🔴' : hasPending ? '🟡' : '🟢';
+
+  const r = 15;
+  const circ = 2 * Math.PI * r;
+  const filled = (pct / 100) * circ;
+  const ringSvg = `<svg width="38" height="38" viewBox="0 0 38 38" style="flex-shrink:0">
+    <circle cx="19" cy="19" r="${r}" fill="none" stroke="#e0dbd0" stroke-width="4"/>
+    <circle cx="19" cy="19" r="${r}" fill="none" stroke="#5a8f4a" stroke-width="4"
+      stroke-dasharray="${filled.toFixed(1)} ${circ.toFixed(1)}"
+      transform="rotate(-90 19 19)"/>
+    <text x="19" y="22.5" text-anchor="middle" font-size="8" fill="#3d6b35" font-weight="700">${pct}%</text>
+  </svg>`;
+
+  return `<div class="bed-card" onclick="selectBedAndSwitch('${bed.id}')">
+    <div class="bed-card-top">
+      <span class="bed-card-name">${bed.name}</span>
+      <span class="status-dot">${dot}</span>
+    </div>
+    <div class="bed-card-mid">
+      <span class="crop-emojis">${emojis}</span>
+      ${ringSvg}
+    </div>
+    <div class="stage-badge" style="background:${stageColor}">${stageLabel}</div>
+  </div>`;
+}
+
+function buildTaskRow(task) {
+  const checked = task.is_complete ? 'checked' : '';
+  const completedCls = task.is_complete ? 'completed' : '';
+  const bedLabel = task.bed_id
+    ? `<span class="bed-pill">${task.bed_id.replace('bed', 'Bed ')}</span>`
+    : '<span class="bed-pill general">All Beds</span>';
+  const timeLabel = task.is_complete && task.completed_at
+    ? `<span class="completed-time">${fmtDateTime(task.completed_at)}</span>` : '';
+  const undoBtn = task.is_complete
+    ? `<button class="undo-btn" onclick="toggleTask(${task.id});event.stopPropagation()">Undo</button>` : '';
+
+  return `<div class="task-row ${completedCls}" id="task-row-${task.id}">
+    <button class="task-checkbox ${checked}" onclick="toggleTask(${task.id})">
+      ${task.is_complete ? '✓' : ''}
+    </button>
+    <div class="task-content">
+      <div class="task-title">${escHtml(task.title)}</div>
+      <div class="task-meta">${bedLabel}${timeLabel}</div>
+    </div>
+    ${undoBtn}
+  </div>`;
+}
+
+async function toggleTask(id) {
+  try {
+    const updated = await postJSON('/api/tasks/' + id + '/complete', {});
+    // Update in appState
+    for (const list of [appState.tasks.current, appState.tasks.overdue]) {
+      const idx = list.findIndex(t => t.id === id);
+      if (idx !== -1) { list[idx] = updated; break; }
+    }
+    // Update in bed tasks cache
+    for (const bedId of Object.keys(bedTasksCache)) {
+      const idx = bedTasksCache[bedId].findIndex(t => t.id === id);
+      if (idx !== -1) bedTasksCache[bedId][idx] = updated;
+    }
+    if (currentTab === 'dashboard') renderDashboard();
+    else if (currentTab === 'beds') rerenderBedTasks();
+    showToast(updated.is_complete ? '✓ Task complete' : 'Task unmarked');
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+async function applyFertiliserAll() {
+  const btn = document.getElementById('apply-all-btn');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Applying…';
+  let count = 0;
+  for (const bed of appState.beds) {
+    try {
+      await postJSON('/api/fertiliser/apply', { bed_id: bed.id });
+      count++;
+    } catch (_) { /* continue */ }
+  }
+  btn.textContent = '✓ Done';
+  showToast(`Fertiliser applied to ${count} beds`);
+  setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.textContent = 'Apply All'; }
+  }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BEDS TAB
+// ═══════════════════════════════════════════════════════════════
+
+function renderBeds() {
+  const pillsHtml = appState.beds.map(bed => {
+    const shortName = bed.id.replace('bed', 'B');
+    return `<button class="bed-pill-btn ${bed.id === currentBedId ? 'active' : ''}"
+      data-bed-id="${bed.id}"
+      onclick="selectBed('${bed.id}')">${shortName} — ${bed.name.split('—')[1] ? bed.name.split('—')[1].trim() : ''}</button>`;
+  }).join('');
+
+  document.getElementById('tab-beds').innerHTML = `
+    <div class="bed-selector">${pillsHtml}</div>
+    <div id="bed-detail"><div class="loading-screen"><div class="spinner"></div><div>Loading bed data…</div></div></div>`;
+
+  loadBedDetail(currentBedId);
+}
+
+function selectBed(bedId) {
+  currentBedId = bedId;
+  document.querySelectorAll('.bed-pill-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.bedId === bedId);
+  });
+  document.getElementById('bed-detail').innerHTML =
+    '<div class="loading-screen"><div class="spinner"></div><div>Loading…</div></div>';
+  loadBedDetail(bedId);
+}
+
+async function loadBedDetail(bedId) {
+  try {
+    const [tasks, notes, analyses] = await Promise.all([
+      bedTasksCache[bedId] ? Promise.resolve(bedTasksCache[bedId]) : fetchJSON('/api/tasks/bed/' + bedId),
+      bedNotesCache[bedId] ? Promise.resolve(bedNotesCache[bedId]) : fetchJSON('/api/notes/' + bedId),
+      bedAnalysisCache[bedId] ? Promise.resolve(bedAnalysisCache[bedId]) : fetchJSON('/api/analysis/' + bedId)
+    ]);
+    bedTasksCache[bedId] = tasks;
+    bedNotesCache[bedId] = notes;
+    bedAnalysisCache[bedId] = analyses;
+
+    const bed = appState.beds.find(b => b.id === bedId);
+    const week = appState.currentWeek;
+    const isFrostLocked = bedId === 'bed5' && week < 25;
+
+    document.getElementById('bed-detail').innerHTML = `
+      <div class="bed-detail">
+        <div class="bed-title">${bed.name}</div>
+
+        <div class="plant-map-container">
+          <div class="section-label">Plant Map</div>
+          ${buildPlantMap(bed, isFrostLocked)}
+        </div>
+
+        ${buildHarvestCountdown(bed)}
+
+        <div class="tasks-section">
+          <div class="section-label">Tasks</div>
+          <div id="bed-tasks-list">${buildBedTaskGroups(tasks, week)}</div>
+        </div>
+
+        <div class="notes-section">
+          <div class="section-label">Notes</div>
+          ${buildNotesSection(bedId, notes)}
+        </div>
+
+        <div class="analysis-history-section">
+          <div class="section-label">Recent AI Analyses</div>
+          ${buildAnalysisHistory(analyses)}
+        </div>
+      </div>`;
+  } catch (e) {
+    document.getElementById('bed-detail').innerHTML =
+      `<div class="empty-state" style="padding:24px">Failed to load: ${e.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SVG PLANT MAP
+// ═══════════════════════════════════════════════════════════════
+
+function buildPlantMap(bed, isFrostLocked) {
+  const plants = bed.plants;
+  if (!plants.length) return '<div class="empty-state">No plants recorded</div>';
+
+  const W = bed.width_cm;
+  const H = bed.height_cm;
+  const PAD = 14;
+
+  const maxCol = Math.max(...plants.map(p => p.grid_col));
+  const maxRow = Math.max(...plants.map(p => p.grid_row));
+  const cols = maxCol + 1;
+  const rows = maxRow + 1;
+
+  const cellW = (W - PAD * 2) / cols;
+  const cellH = (H - PAD * 2) / rows;
+  const r = Math.min(cellW, cellH) * 0.30;
+
+  let inner = '';
+
+  // Trellis lines
+  if (TRELLIS_BEDS.has(bed.id)) {
+    for (let c = 0; c < cols; c++) {
+      const x = PAD + c * cellW + cellW / 2;
+      inner += `<line x1="${x.toFixed(1)}" y1="${PAD}" x2="${x.toFixed(1)}" y2="${H - PAD}"
+        stroke="#8b7355" stroke-width="2" stroke-dasharray="5,4" opacity="0.4"/>`;
+    }
+    // horizontal trellis crossbars
+    for (let row = 1; row < rows; row++) {
+      const y = PAD + row * cellH;
+      inner += `<line x1="${PAD}" y1="${y.toFixed(1)}" x2="${W - PAD}" y2="${y.toFixed(1)}"
+        stroke="#8b7355" stroke-width="1" stroke-dasharray="3,5" opacity="0.25"/>`;
+    }
+  }
+
+  // Plant circles
+  for (const plant of plants) {
+    const cx = PAD + plant.grid_col * cellW + cellW / 2;
+    const cy = PAD + plant.grid_row * cellH + cellH / 2;
+    const color = STAGE_COLORS[plant.stage] || '#ccc';
+    const isOverdue = plant.stage === 'OVERDUE';
+    const stroke = isOverdue ? '#5a0000' : 'rgba(255,255,255,0.7)';
+    const sw = isOverdue ? 2.5 : 1.5;
+    const anim = isOverdue ? 'class="plant-circle overdue-pulse"' : 'class="plant-circle"';
+    const emoji = CROP_EMOJIS[plant.name] || '•';
+
+    inner += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+      fill="${color}" stroke="${stroke}" stroke-width="${sw}" ${anim}
+      onclick="showPlantModal(${plant.id},'${bed.id}')" style="cursor:pointer"/>`;
+
+    if (r > 9) {
+      inner += `<text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle"
+        font-size="${Math.min(r * 0.9, 13).toFixed(0)}" style="pointer-events:none">${emoji}</text>`;
+    }
+  }
+
+  // Frost lock overlay for bed5
+  if (isFrostLocked) {
+    inner += `<rect x="0" y="0" width="${W}" height="${H}" fill="rgba(80,130,200,0.28)" rx="6"/>
+      <text x="${W / 2}" y="${H / 2 - 10}" text-anchor="middle" font-size="22" opacity="0.9">⚠</text>
+      <rect x="${W / 2 - 56}" y="${H / 2 - 4}" width="112" height="18" rx="4" fill="rgba(20,60,120,0.55)"/>
+      <text x="${W / 2}" y="${H / 2 + 10}" text-anchor="middle" font-size="9" fill="#d0e8ff" font-weight="700">Frost Risk — Plant Oct 2026</text>`;
+  }
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="plant-map-svg" style="max-height:300px">
+    <rect x="0" y="0" width="${W}" height="${H}" fill="#e0d8c4" rx="8"/>
+    ${inner}
+  </svg>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:11px">
+    ${Object.entries(STAGE_COLORS).map(([s, c]) =>
+      `<span style="display:flex;align-items:center;gap:3px">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c}"></span>
+        ${STAGE_LABELS[s]}
+      </span>`
+    ).join('')}
+  </div>`;
+}
+
+function showPlantModal(plantId, bedId) {
+  const bed = appState.beds.find(b => b.id === bedId);
+  if (!bed) return;
+  const plant = bed.plants.find(p => p.id === plantId);
+  if (!plant) return;
+
+  const thresholds = plant.stage_thresholds;
+  const days = plant.days_since_planted;
+  const stageOrder = ['GERMINATING', 'SEEDLING', 'GROWING', 'FLOWERING', 'HARVEST_READY', 'OVERDUE'];
+  let nextStage = null;
+  let daysToNext = null;
+  for (const s of stageOrder) {
+    if (thresholds[s] !== undefined && thresholds[s] > days) {
+      nextStage = s; daysToNext = thresholds[s] - days; break;
+    }
+  }
+
+  const color = STAGE_COLORS[plant.stage] || '#ccc';
+  const emoji = CROP_EMOJIS[plant.name] || '🌱';
+  const harvestMsg = plant.days_to_harvest > 0 ? `${plant.days_to_harvest} days` : '🔔 Now!';
+
+  showModal(`
+    <div class="modal-plant-header">
+      <span class="modal-plant-emoji">${emoji}</span>
+      <div>
+        <div class="modal-plant-name">${plant.name}</div>
+        <div class="modal-plant-variety">${plant.variety}</div>
+      </div>
+    </div>
+    <div class="modal-stage-badge" style="background:${color}">${STAGE_LABELS[plant.stage] || plant.stage}</div>
+    <div class="modal-stats">
+      <div class="modal-stat">
+        <div class="modal-stat-label">Days since sown</div>
+        <div class="modal-stat-value">${days}</div>
+      </div>
+      ${nextStage ? `<div class="modal-stat">
+        <div class="modal-stat-label">To ${STAGE_LABELS[nextStage]}</div>
+        <div class="modal-stat-value">${daysToNext}d</div>
+      </div>` : ''}
+      <div class="modal-stat">
+        <div class="modal-stat-label">To harvest</div>
+        <div class="modal-stat-value">${harvestMsg}</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Position</div>
+        <div class="modal-stat-value" style="font-size:13px">C${plant.grid_col + 1} R${plant.grid_row + 1}</div>
+      </div>
+    </div>`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HARVEST COUNTDOWN
+// ═══════════════════════════════════════════════════════════════
+
+function buildHarvestCountdown(bed) {
+  if (!bed.plants.length) return '';
+
+  const seen = new Set();
+  const crops = [];
+  for (const p of bed.plants) {
+    if (!seen.has(p.name)) { seen.add(p.name); crops.push(p); }
+  }
+
+  const cards = crops.map(p => {
+    const emoji = CROP_EMOJIS[p.name] || '🌱';
+    const overdue = p.stage === 'OVERDUE';
+    const ready = p.stage === 'HARVEST_READY';
+    const soon = !overdue && !ready && p.days_to_harvest <= 14 && p.days_to_harvest > 0;
+
+    let cls = 'harvest-card';
+    let msg = '';
+    if (overdue) {
+      cls += ' overdue-card';
+      msg = `<span class="overdue-label">⚠ OVERDUE — harvest now!</span>`;
+    } else if (ready) {
+      cls += ' ready-card';
+      msg = `<span class="ready-label">🔔 Ready to harvest!</span>`;
+    } else if (soon) {
+      cls += ' soon-card';
+      msg = `<span class="soon-label">~${p.days_to_harvest} days to harvest</span>`;
+    } else if (p.days_to_harvest > 0) {
+      msg = `<span class="days-label">~${p.days_to_harvest} days to harvest</span>`;
+    } else {
+      msg = `<span class="ready-label">In harvest window</span>`;
+    }
+
+    return `<div class="${cls}">
+      <span class="harvest-icon">${emoji}</span>
+      <div class="harvest-info">
+        <div class="harvest-name">${p.name} <span style="font-weight:400;font-size:12px;color:#888">${p.variety}</span></div>
+        ${msg}
+      </div>
+    </div>`;
+  });
+
+  return `<div class="harvest-countdown">
+    <div class="section-label">Harvest Countdown</div>
+    <div class="harvest-cards">${cards.join('')}</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BED TASK GROUPS
+// ═══════════════════════════════════════════════════════════════
+
+function buildBedTaskGroups(tasks, currentWeek) {
+  if (!tasks.length) return '<div class="empty-state">No tasks for this bed</div>';
+
+  const grouped = {};
+  for (const t of tasks) {
+    const w = t.week_number;
+    if (!grouped[w]) grouped[w] = [];
+    grouped[w].push(t);
+  }
+
+  const weeks = Object.keys(grouped).map(Number).sort((a, b) => a - b);
+
+  return weeks.map(w => {
+    const wTasks = grouped[w];
+    const done = wTasks.filter(t => t.is_complete).length;
+    const isCurrent = w === currentWeek;
+    const isExpanded = isCurrent || w >= currentWeek;
+
+    return `<div class="week-group ${isExpanded ? 'expanded' : 'collapsed'} ${isCurrent ? 'current-week' : ''}" id="wg-${w}">
+      <div class="week-group-header" onclick="toggleWeekGroup(${w})">
+        <span class="week-label">Week ${w}</span>
+        <span class="week-progress">${done}/${wTasks.length} done</span>
+        <span class="chevron">${isExpanded ? '▼' : '▶'}</span>
+      </div>
+      <div class="week-group-body" style="padding:0 12px">
+        ${wTasks.map(t => buildTaskRow(t)).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleWeekGroup(w) {
+  const el = document.getElementById('wg-' + w);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+  el.classList.toggle('expanded');
+  const chevron = el.querySelector('.chevron');
+  if (chevron) chevron.textContent = el.classList.contains('expanded') ? '▼' : '▶';
+}
+
+function rerenderBedTasks() {
+  const list = document.getElementById('bed-tasks-list');
+  if (!list) return;
+  const tasks = bedTasksCache[currentBedId] || [];
+  list.innerHTML = buildBedTaskGroups(tasks, appState.currentWeek);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NOTES
+// ═══════════════════════════════════════════════════════════════
+
+function buildNotesSection(bedId, notes) {
+  const noteItems = notes.length
+    ? notes.map(n => `<div class="note-item">
+        <div class="note-content">${escHtml(n.content)}</div>
+        <div class="note-date">${fmtDateTime(n.created_at)}</div>
+      </div>`).join('')
+    : '<div class="empty-state">No notes yet</div>';
+
+  return `<div class="notes-form">
+      <textarea class="notes-textarea" id="note-input-${bedId}" placeholder="Add a note…" rows="2"></textarea>
+      <button class="save-note-btn" onclick="saveNote('${bedId}')">Save</button>
+    </div>
+    <div id="notes-list-${bedId}">${noteItems}</div>`;
+}
+
+async function saveNote(bedId) {
+  const input = document.getElementById('note-input-' + bedId);
+  if (!input) return;
+  const content = input.value.trim();
+  if (!content) return;
+
+  try {
+    await postJSON('/api/notes/' + bedId, { content });
+    input.value = '';
+    const notes = await fetchJSON('/api/notes/' + bedId);
+    bedNotesCache[bedId] = notes;
+    const list = document.getElementById('notes-list-' + bedId);
+    if (list) {
+      list.innerHTML = notes.map(n => `<div class="note-item">
+        <div class="note-content">${escHtml(n.content)}</div>
+        <div class="note-date">${fmtDateTime(n.created_at)}</div>
+      </div>`).join('');
+    }
+    showToast('Note saved');
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANALYSIS HISTORY (BEDS TAB)
+// ═══════════════════════════════════════════════════════════════
+
+function buildAnalysisHistory(analyses) {
+  if (!analyses.length) return '<div class="empty-state">No analyses yet — use the AI Analysis tab to analyse a photo</div>';
+
+  return analyses.map((a, idx) => {
+    let result = null;
+    try { result = JSON.parse(a.result_json); } catch (_) { return ''; }
+
+    const score = result.health_score || 0;
+    const scoreCls = score >= 7 ? '' : score >= 4 ? 'mid' : 'low';
+
+    return `<div class="analysis-hist-card" id="ahc-${idx}">
+      <div class="analysis-hist-header" onclick="toggleAnalysisCard(${idx})">
+        <span class="analysis-hist-icon">📷</span>
+        <div class="analysis-hist-meta">
+          <div class="analysis-hist-date">${fmtDateTime(a.created_at)}</div>
+          <div class="analysis-hist-summary">${escHtml(result.health_summary || '')}</div>
+        </div>
+        <span class="analysis-score-badge ${scoreCls}">${score}/10</span>
+      </div>
+      <div class="analysis-hist-body">
+        ${buildResultBody(result)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleAnalysisCard(idx) {
+  const el = document.getElementById('ahc-' + idx);
+  if (el) el.classList.toggle('expanded');
+}
+
+function buildResultBody(result) {
+  const issues = (result.issues_detected || []);
+  const issuesHtml = issues.length
+    ? issues.map(i => `<span class="issue-badge">${escHtml(i)}</span>`).join('')
+    : '<span class="no-issues">No issues detected</span>';
+
+  const recs = (result.recommendations || []);
+  const recsHtml = recs.map(r => `<li>${escHtml(r)}</li>`).join('');
+
+  const stageMatch = result.stage_matches_expected
+    ? '<span class="badge green">✓ Stage matches expected</span>'
+    : '<span class="badge amber">⚠ Stage differs from expected</span>';
+
+  return `<div class="result-row">
+    <span class="result-label" style="margin:0">Stage:</span>
+    <span class="stage-badge-sm" style="background:${STAGE_COLORS[result.observed_stage] || '#888'}">${result.observed_stage || '—'}</span>
+    ${stageMatch}
+  </div>
+  <div class="result-section">
+    <div class="result-label">Issues</div>
+    <div class="issues-list">${issuesHtml}</div>
+  </div>
+  <div class="result-section">
+    <div class="result-label">Harvest Estimate</div>
+    <div class="harvest-est">${escHtml(result.harvest_estimate || '—')}</div>
+  </div>
+  ${recsHtml ? `<div class="result-section">
+    <div class="result-label">Recommendations</div>
+    <ol class="rec-list">${recsHtml}</ol>
+  </div>` : ''}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FERTILISER TAB
+// ═══════════════════════════════════════════════════════════════
+
+async function loadAndRenderFertiliser() {
+  document.getElementById('tab-fertiliser').innerHTML =
+    '<div class="loading-screen"><div class="spinner"></div><div>Loading…</div></div>';
+  try {
+    fertiliserState = await fetchJSON('/api/fertiliser');
+    renderFertiliser();
+  } catch (e) {
+    document.getElementById('tab-fertiliser').innerHTML =
+      `<div class="empty-state" style="padding:32px">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function renderFertiliser() {
+  const f = fertiliserState;
+  const isGold = f.currentProduct.includes('Liquid Gold');
+
+  const bedRows = f.bedStatus.map(b => {
+    const lastStr = b.last_applied
+      ? `Last: ${fmtDateTime(b.last_applied)}`
+      : 'Not yet applied';
+    return `<div class="fert-bed-row">
+      <div>
+        <div class="fert-bed-name">${b.bed_name}</div>
+        <div class="fert-last-applied">${lastStr}</div>
+      </div>
+      <button class="apply-btn" id="apply-btn-${b.bed_id}" onclick="applyFertiliser('${b.bed_id}')">✅ Apply Today</button>
+    </div>`;
+  }).join('');
+
+  const rotationRows = f.upcoming.map(u => {
+    const isBooch = u.product.includes('Eco Booch');
+    const prodCls = isBooch ? 'booch' : 'gold';
+    return `<div class="rotation-row">
+      <span class="rotation-week">Week ${u.week}</span>
+      <span class="rotation-product ${prodCls}">${isBooch ? '🍵' : '🌊'} ${u.product}</span>
+    </div>`;
+  }).join('');
+
+  // History per bed (last 5)
+  const historyHtml = f.bedStatus.map(b => {
+    if (!b.history || !b.history.length) return '';
+    return `<div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:#555">${b.bed_name}</div>
+      <div style="background:#fff;border-radius:8px;padding:4px 12px;box-shadow:var(--shadow)">
+        ${b.history.map(h => `<div class="fert-history-item">
+          <span class="fert-history-product">${h.product}</span>
+          <span class="fert-history-date">${fmtDateTime(h.applied_at)}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('tab-fertiliser').innerHTML = `
+    <div class="fert-current-card" style="background:${isGold ? 'linear-gradient(135deg,#1a4a6b,#2a6b9b)' : 'linear-gradient(135deg,#3d6b35,#5a8f4a)'}">
+      <div class="fert-current-title">Week ${f.currentWeek} — Apply Now</div>
+      <div class="fert-current-product">${isGold ? '🌊' : '🍵'} ${f.currentProduct}</div>
+      <div class="fert-current-instructions">Apply diluted to root zone — not foliar spray in winter</div>
+    </div>
+
+    <div class="section-label" style="margin-bottom:10px">Apply to Beds</div>
+    <div class="fert-bed-list">${bedRows}</div>
+
+    <div class="section-label" style="margin-bottom:10px">Upcoming 8 Weeks</div>
+    <div class="rotation-calendar">
+      <div class="rotation-row" style="font-weight:700;padding-bottom:6px;margin-bottom:2px;border-bottom:2px solid var(--cream-dark)">
+        <span class="rotation-week" style="color:var(--green-dark)">Current</span>
+        <span class="rotation-product ${isGold ? 'gold' : 'booch'}">${isGold ? '🌊' : '🍵'} ${f.currentProduct}</span>
+      </div>
+      ${rotationRows}
+    </div>
+
+    ${historyHtml ? `<div class="section-label" style="margin-bottom:10px">Application History</div>
+      <div class="fert-history-section">${historyHtml}</div>` : ''}`;
+}
+
+async function applyFertiliser(bedId) {
+  const btn = document.getElementById('apply-btn-' + bedId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+  try {
+    const r = await postJSON('/api/fertiliser/apply', { bed_id: bedId });
+    showToast(`${r.product} applied to ${bedId.replace('bed', 'Bed ')}`);
+    await loadAndRenderFertiliser();
+  } catch (e) {
+    showToast('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Apply Today'; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AI ANALYSIS TAB
+// ═══════════════════════════════════════════════════════════════
+
+function renderAnalysisTab() {
+  const pillsHtml = appState.beds.map(bed => {
+    const short = bed.id.replace('bed', 'B');
+    return `<button class="bed-pill-btn ${bed.id === analysisBedId ? 'active' : ''}"
+      data-bed-id="${bed.id}"
+      onclick="selectAnalysisBed('${bed.id}')">${short}</button>`;
+  }).join('');
+
+  document.getElementById('tab-analysis').innerHTML = `
+    <div class="page-header">
+      <div class="week-badge">AI Analysis</div>
+      <div class="current-date">Photo analysis powered by Claude</div>
+    </div>
+    <div class="analysis-bed-selector">
+      <div class="section-label" style="margin-bottom:8px">Select Bed</div>
+      <div class="bed-selector" id="analysis-bed-pills">${pillsHtml}</div>
+    </div>
+    <div class="upload-zone" id="upload-zone" onclick="triggerFileInput()">
+      <span class="upload-icon">📸</span>
+      <span class="upload-label">Tap to take photo or select image</span>
+      <span class="upload-sub">Supports JPG, PNG, HEIC — max 10 MB</span>
+    </div>
+    <input type="file" id="file-input" accept="image/*" capture="environment" onchange="onFileSelected(event)">
+    <div class="preview-section" id="preview-section">
+      <img id="preview-img" class="preview-img" src="" alt="Preview">
+      <button class="analyse-btn" id="btn-analyse" onclick="analyseImage()">🔍 Analyse with Claude</button>
+    </div>
+    <div class="analysis-error" id="analysis-error"></div>
+    <div class="spinner-overlay" id="analysis-spinner">
+      <div class="spinner"></div>
+      <div class="spinner-label">Analysing with Claude AI…</div>
+    </div>
+    <div class="analysis-result" id="analysis-result"></div>`;
+
+  analysisFile = null;
+  if (analysisBlobUrl) {
+    URL.revokeObjectURL(analysisBlobUrl);
+    analysisBlobUrl = null;
+  }
+}
+
+function selectAnalysisBed(bedId) {
+  analysisBedId = bedId;
+  document.querySelectorAll('#analysis-bed-pills .bed-pill-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.bedId === bedId);
+  });
+}
+
+function triggerFileInput() {
+  document.getElementById('file-input').click();
+}
+
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  analysisFile = file;
+
+  const zone = document.getElementById('upload-zone');
+  if (zone) zone.classList.add('has-file');
+
+  const preview = document.getElementById('preview-section');
+  const img = document.getElementById('preview-img');
+  if (analysisBlobUrl) URL.revokeObjectURL(analysisBlobUrl);
+  analysisBlobUrl = URL.createObjectURL(file);
+  img.src = analysisBlobUrl;
+  preview.style.display = 'block';
+
+  const errEl = document.getElementById('analysis-error');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+  const resultEl = document.getElementById('analysis-result');
+  if (resultEl) resultEl.style.display = 'none';
+}
+
+async function analyseImage() {
+  if (!analysisFile) return;
+
+  const btn = document.getElementById('btn-analyse');
+  const spinner = document.getElementById('analysis-spinner');
+  const resultEl = document.getElementById('analysis-result');
+  const errEl = document.getElementById('analysis-error');
+
+  btn.disabled = true;
+  spinner.style.display = 'flex';
+  resultEl.style.display = 'none';
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+  try {
+    const formData = new FormData();
+    formData.append('bed_id', analysisBedId);
+    formData.append('image', analysisFile);
+
+    const r = await fetch('/api/analyse', { method: 'POST', body: formData });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({ error: 'Analysis failed' }));
+      throw new Error(e.error || 'Analysis failed');
+    }
+    const result = await r.json();
+
+    renderAnalysisResult(result);
+
+    // Invalidate analysis cache for this bed
+    delete bedAnalysisCache[analysisBedId];
+  } catch (e) {
+    if (errEl) { errEl.textContent = '⚠ ' + e.message; errEl.style.display = 'block'; }
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+  }
+}
+
+function renderAnalysisResult(result) {
+  const resultEl = document.getElementById('analysis-result');
+  if (!resultEl) return;
+
+  const score = result.health_score || 0;
+  const dialHtml = buildHealthDial(score);
+  const urgentHtml = result.urgent
+    ? '<div class="urgent-banner pulse">⚠ Urgent action needed — immediate response required</div>' : '';
+
+  resultEl.innerHTML = `
+    ${urgentHtml}
+    <div class="result-card">
+      <div class="result-dial-section">
+        ${dialHtml}
+        <div class="result-health-text">
+          <div class="health-label">Health Score</div>
+          <div class="health-summary">${escHtml(result.health_summary || '')}</div>
+        </div>
+      </div>
+      ${buildResultBody(result)}
+    </div>`;
+  resultEl.style.display = 'block';
+}
+
+function buildHealthDial(score) {
+  const r = 42;
+  const cx = 56;
+  const cy = 56;
+
+  const sweepDeg = (score / 10) * 180;
+  const endAngleDeg = 180 - sweepDeg;
+  const endAngleRad = endAngleDeg * Math.PI / 180;
+  const ex = cx + r * Math.cos(endAngleRad);
+  const ey = cy - r * Math.sin(endAngleRad);
+  const largeArc = sweepDeg > 180 ? 1 : 0;
+
+  const color = score >= 7 ? '#5a8f4a' : score >= 4 ? '#d4860a' : '#8b1a1a';
+
+  const activePath = score > 0
+    ? `<path d="M${cx - r},${cy} A${r},${r} 0 ${largeArc},0 ${ex.toFixed(2)},${ey.toFixed(2)}"
+        fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round"/>`
+    : '';
+
+  return `<svg width="112" height="62" viewBox="0 0 112 62" style="flex-shrink:0">
+    <path d="M${cx - r},${cy} A${r},${r} 0 0,0 ${cx + r},${cy}"
+      fill="none" stroke="#e0dbd0" stroke-width="8" stroke-linecap="round"/>
+    ${activePath}
+    <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}">${score}</text>
+    <text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="10" fill="#aaa">/10</text>
+  </svg>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════════
+
+async function init() {
+  document.getElementById('tab-dashboard').innerHTML =
+    '<div class="loading-screen"><div class="spinner"></div><div>Loading garden data…</div></div>';
+  try {
+    appState = await fetchJSON('/api/state');
+    renderDashboard();
+  } catch (e) {
+    document.getElementById('tab-dashboard').innerHTML =
+      `<div class="loading-screen">
+        <div style="font-size:36px">🌿</div>
+        <div style="font-weight:700;font-size:16px">Could not connect to server</div>
+        <div style="font-size:13px;color:#aaa;margin-top:4px">${e.message}</div>
+        <button onclick="init()" style="margin-top:16px;background:var(--green-dark);color:#fff;border:none;border-radius:20px;padding:10px 24px;font-size:14px;cursor:pointer">Retry</button>
+      </div>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

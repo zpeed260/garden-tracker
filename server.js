@@ -18,7 +18,7 @@ const SEASON_START = new Date('2026-04-26');
 // ─── Week / fertiliser helpers ───────────────────────────────────────────────
 
 function getCurrentWeek() {
-  return Math.floor((Date.now() - SEASON_START.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  return Math.max(0, Math.floor((Date.now() - SEASON_START.getTime()) / (7 * 24 * 60 * 60 * 1000)));
 }
 
 function getFertiliserForWeek(week) {
@@ -29,16 +29,28 @@ function getCurrentFertiliser() {
   return getFertiliserForWeek(getCurrentWeek());
 }
 
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.error('ANTHROPIC_API_KEY environment variable is required');
+  process.exit(1);
+}
+const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
 // ─── Stage computation ────────────────────────────────────────────────────────
 
 function computeStage(plantedDate, thresholdsJson) {
-  const thresholds = JSON.parse(thresholdsJson);
+  let thresholds;
+  try {
+    thresholds = JSON.parse(thresholdsJson);
+  } catch (_) {
+    return 'SEEDED';
+  }
   const daysSincePlanted = Math.floor(
     (Date.now() - new Date(plantedDate).getTime()) / 86400000
   );
   const stageOrder = [
     'OVERDUE',
     'HARVEST_READY',
+    'HEADING',
     'FLOWERING',
     'GROWING',
     'SEEDLING',
@@ -117,44 +129,44 @@ if (bedCount === 0) {
   const PLANTED = '2026-04-27';
 
   const cauli_thresholds = JSON.stringify({
-    GERMINATING: 7, SEEDLING: 21, GROWING: 60, FLOWERING: 90,
-    HARVEST_READY: 120, OVERDUE: 150,
+    SEEDLING: 14, GROWING: 60, HEADING: 100,
+    HARVEST_READY: 140, OVERDUE: 180,
   });
   const beetroot_thresholds = JSON.stringify({
-    GERMINATING: 7, SEEDLING: 21, GROWING: 60, FLOWERING: 90,
-    HARVEST_READY: 120, OVERDUE: 150,
+    GERMINATING: 14, SEEDLING: 28, GROWING: 60,
+    HARVEST_READY: 120, OVERDUE: 170,
   });
   const broadbean_thresholds = JSON.stringify({
     GERMINATING: 10, SEEDLING: 25, GROWING: 70, FLOWERING: 100,
-    HARVEST_READY: 120, OVERDUE: 145,
+    HARVEST_READY: 130, OVERDUE: 165,
   });
   const carrot_thresholds = JSON.stringify({
-    GERMINATING: 14, SEEDLING: 30, GROWING: 80, HARVEST_READY: 110, OVERDUE: 140,
+    GERMINATING: 14, SEEDLING: 30, GROWING: 80, HARVEST_READY: 140, OVERDUE: 200,
   });
   const lettuce_thresholds = JSON.stringify({
-    GERMINATING: 7, SEEDLING: 14, HARVEST_READY: 45,
+    GERMINATING: 7, SEEDLING: 14, GROWING: 30, HARVEST_READY: 55, OVERDUE: 200,
   });
   const sugarpea_thresholds = JSON.stringify({
-    GERMINATING: 8, SEEDLING: 20, GROWING: 55, FLOWERING: 75,
-    HARVEST_READY: 90, OVERDUE: 130,
+    GERMINATING: 12, SEEDLING: 20, GROWING: 55, FLOWERING: 75,
+    HARVEST_READY: 77, OVERDUE: 120,
   });
   const wintergreens_thresholds = JSON.stringify({
-    GERMINATING: 7, HARVEST_READY: 40,
+    GERMINATING: 7, SEEDLING: 14, GROWING: 25, HARVEST_READY: 50, OVERDUE: 300,
   });
 
   // bed1 cauliflower positions
   for (const [col, row] of [[0,0],[2,0],[0,2],[2,2]]) {
-    insertPlant.run('bed1', 'Cauliflower', 'Tasty', col, row, PLANTED, 119, 140, cauli_thresholds);
+    insertPlant.run('bed1', 'Cauliflower', 'Tasty', col, row, PLANTED, 140, 168, cauli_thresholds);
   }
   // bed1 beetroot positions
   for (const [col, row] of [[1,0],[0,1],[1,1],[2,1],[1,2],[0,3],[1,3],[2,3]]) {
-    insertPlant.run('bed1', 'Beetroot', 'Detroit', col, row, PLANTED, 119, 140, beetroot_thresholds);
+    insertPlant.run('bed1', 'Beetroot', 'Detroit', col, row, PLANTED, 119, 170, beetroot_thresholds);
   }
 
   // bed2 broad beans — 4×5 grid (cols 0-3, rows 0-4)
   for (let col = 0; col <= 3; col++) {
     for (let row = 0; row <= 4; row++) {
-      insertPlant.run('bed2', 'Broad Bean', 'Coles Early', col, row, PLANTED, 112, 140, broadbean_thresholds);
+      insertPlant.run('bed2', 'Broad Bean', 'Coles Early', col, row, PLANTED, 130, 165, broadbean_thresholds);
     }
   }
 
@@ -179,7 +191,7 @@ if (bedCount === 0) {
   // bed5 winter greens — 2×8 grid (cols 0-1, rows 0-7)
   for (let col = 0; col <= 1; col++) {
     for (let row = 0; row <= 7; row++) {
-      insertPlant.run('bed5', 'Spinach/Silverbeet/Kale', 'Mix', col, row, PLANTED, 28, 9999, wintergreens_thresholds);
+      insertPlant.run('bed5', 'Spinach/Silverbeet/Kale', 'Mix', col, row, PLANTED, 45, 9999, wintergreens_thresholds);
     }
   }
 
@@ -202,7 +214,7 @@ if (bedCount === 0) {
   insertTask.run(1, 'bed3','Sow carrot seeds in rows 15cm apart; transplant lettuce to edges', 0, null);
   insertTask.run(1, 'bed4','Sow sugar snap peas along trellis, 10–15cm spacing, 2 rows', 0, null);
   insertTask.run(1, 'bed5','Sow spinach/silverbeet/kale', 0, null);
-  insertTask.run(1, 'bed2','Attach and secure trellis netting to Bed 2', 0, null);
+  insertTask.run(1, 'bed2','Drive in 1.2m bamboo canes along Bed 2 for broad beans — one per plant pair', 0, null);
   insertTask.run(1, 'bed4','Attach and secure trellis netting to Bed 4', 0, null);
   insertTask.run(1, null,  'Apply iron-based pet-safe snail bait around all beds', 0, null);
   insertTask.run(1, null,  'Check chicken run netting is secure and away from beds', 0, null);
@@ -215,7 +227,7 @@ if (bedCount === 0) {
 
   // Week 3
   insertTask.run(3, null,  "Apply Vasili's Liquid Gold diluted to root zone of all beds", 0, null);
-  insertTask.run(3, 'bed2','Tie broad bean shoots loosely to trellis as they emerge', 0, null);
+  insertTask.run(6, 'bed2','Tie broad bean shoots loosely to canes — plants should be 20–30cm now', 0, null);
   insertTask.run(3, 'bed1','Check germination — resow any bare patches in Bed 1', 0, null);
   insertTask.run(3, 'bed3','Check germination — resow any bare patches in Bed 3', 0, null);
   insertTask.run(3, 'bed3','Thin lettuce seedlings to 20cm apart', 0, null);
@@ -264,12 +276,16 @@ if (bedCount === 0) {
   // Weeks 9–12
   for (let w = 9; w <= 12; w++) {
     insertTask.run(w, null,  'Alternate Liquid Gold / Eco Booch every 2 weeks (fortnightly)', 0, null);
-    insertTask.run(w, 'bed1','Side-dress cauliflower with Blood & Bone monthly', 0, null);
     insertTask.run(w, 'bed2','Stake and tie broad beans as they reach 90–120cm', 0, null);
     insertTask.run(w, 'bed3','Ongoing cut-and-come-again harvest of lettuce', 0, null);
     insertTask.run(w, 'bed5','Ongoing cut-and-come-again harvest of winter greens', 0, null);
     insertTask.run(w, null,  'Check for slugs after rain — reapply bait', 0, null);
   }
+  // Monthly cauliflower Blood & Bone at weeks 9 and 13 only (not every week)
+  insertTask.run(9,  'bed1','Side-dress cauliflower with Blood & Bone around each plant', 0, null);
+  insertTask.run(10, 'bed1','Tie outer leaves over cauliflower curds as heads begin to form — protects from frost and sun discolouration', 0, null);
+
+  insertTask.run(13, 'bed1','Side-dress cauliflower with Blood & Bone around each plant (monthly)', 0, null);
 
   // Weeks 13–16
   for (let w = 13; w <= 16; w++) {
@@ -283,7 +299,11 @@ if (bedCount === 0) {
 
   // Weeks 17–20
   for (let w = 17; w <= 20; w++) {
-    insertTask.run(w, null,  'Apply Eco Booch to remaining crops', 0, null);
+    if (w % 2 !== 0) {
+      insertTask.run(w, null, "Apply Vasili's Liquid Gold to remaining crops", 0, null);
+    } else {
+      insertTask.run(w, null, "Apply Vasili's Eco Booch to remaining crops", 0, null);
+    }
     insertTask.run(w, 'bed3','Harvest carrots with a gentle pull test', 0, null);
     insertTask.run(w, 'bed2','Clear spent bean plants — compost (nitrogen fixers, a bonus)', 0, null);
     insertTask.run(w, 'bed4','Clear spent pea plants — compost (nitrogen fixers, a bonus)', 0, null);
@@ -293,7 +313,7 @@ if (bedCount === 0) {
 
   // Week 21
   insertTask.run(21, null,  'Apply Liquid Gold to all prepped beds before planting', 0, null);
-  insertTask.run(21, 'bed5','Sow Climbing Bean Vitalis after mid-October frost risk clears', 0, null);
+  insertTask.run(24, 'bed5','Sow Climbing Bean Vitalis — mid-October frost risk now past in Eltham', 0, null);
   insertTask.run(21, null,  'Begin fortnightly Eco Booch on all spring crops', 0, null);
 }
 
@@ -334,6 +354,16 @@ const insertAnalysis = db.prepare(
   'INSERT INTO analysis_log (bed_id, image_base64, result_json, created_at) VALUES (?, ?, ?, ?)'
 );
 const getBedById = db.prepare('SELECT * FROM beds WHERE id = ?');
+const getTaskStatsByBed = db.prepare(
+  `SELECT bed_id, COUNT(*) as total, SUM(is_complete) as completed
+   FROM tasks WHERE bed_id IS NOT NULL GROUP BY bed_id`
+);
+const getAllTasksForBed = db.prepare(
+  'SELECT * FROM tasks WHERE (bed_id = ? OR bed_id IS NULL) ORDER BY week_number, id'
+);
+const getRecentFertiliserByBed = db.prepare(
+  'SELECT product, applied_at FROM fertiliser_log WHERE bed_id = ? ORDER BY id DESC LIMIT 5'
+);
 
 // ─── Bed helper ───────────────────────────────────────────────────────────────
 
@@ -367,12 +397,21 @@ function enrichBed(bed) {
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Multer — memory storage, single image field, 10 MB limit
+// Multer — memory storage, single image field, 10 MB limit, image types only
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif']);
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type "${file.mimetype}". Allowed: jpeg, png, gif, webp, heic`));
+    }
+  },
 }).single('image');
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -392,6 +431,11 @@ app.get('/api/state', (req, res) => {
 
   const currentTasks = getTasksByWeek.all(currentWeek);
   const overdueTasks = getIncompleteTasksBefore.all(currentWeek);
+  const taskStats = getTaskStatsByBed.all();
+  const taskSummary = {};
+  for (const s of taskStats) {
+    taskSummary[s.bed_id] = { total: s.total, completed: s.completed || 0 };
+  }
 
   res.json({
     currentWeek,
@@ -399,6 +443,7 @@ app.get('/api/state', (req, res) => {
     fertiliser,
     beds,
     tasks: { current: currentTasks, overdue: overdueTasks },
+    taskSummary,
   });
 });
 
@@ -452,11 +497,13 @@ app.get('/api/fertiliser', (req, res) => {
   const beds = getAllBeds.all();
   const bedStatus = beds.map((bed) => {
     const last = getLastFertiliserByBed.get(bed.id);
+    const history = getRecentFertiliserByBed.all(bed.id);
     return {
       bed_id: bed.id,
       bed_name: bed.name,
       last_applied: last ? last.applied_at : null,
       last_product: last ? last.product : null,
+      history,
     };
   });
 
@@ -482,6 +529,8 @@ app.post('/api/fertiliser/apply', (req, res) => {
 // GET /api/notes/:bed_id
 app.get('/api/notes/:bed_id', (req, res) => {
   const { bed_id } = req.params;
+  const bed = getBedById.get(bed_id);
+  if (!bed) return res.status(404).json({ error: 'Bed not found' });
   const notes = getNotesByBed.all(bed_id);
   res.json(notes);
 });
@@ -492,6 +541,9 @@ app.post('/api/notes/:bed_id', (req, res) => {
   const { content } = req.body;
   if (!content || typeof content !== 'string' || content.trim() === '') {
     return res.status(400).json({ error: 'content is required' });
+  }
+  if (content.length > 2000) {
+    return res.status(400).json({ error: 'content must be 2000 characters or fewer' });
   }
   const bed = getBedById.get(bed_id);
   if (!bed) {
@@ -513,6 +565,8 @@ app.post('/api/notes/:bed_id', (req, res) => {
 // GET /api/analysis/:bed_id
 app.get('/api/analysis/:bed_id', (req, res) => {
   const { bed_id } = req.params;
+  const bed = getBedById.get(bed_id);
+  if (!bed) return res.status(404).json({ error: 'Bed not found' });
   const analyses = getAnalysisByBed.all(bed_id);
   res.json(analyses);
 });
@@ -540,27 +594,37 @@ app.post('/api/analyse', (req, res) => {
     try {
       const plants = getPlantsByBed.all(bed_id);
 
-      // Build crop list and determine primary plant's stage
+      // Build crop list and per-crop expected stages
       const cropList = [...new Set(plants.map((p) => `${p.name} (${p.variety})`))].join(', ');
       const primaryPlant = plants[0] || null;
       const plantedDate = primaryPlant ? primaryPlant.planted_date : 'unknown';
-      const expectedStage = primaryPlant
-        ? computeStage(primaryPlant.planted_date, primaryPlant.stage_thresholds)
-        : 'unknown';
       const currentWeek = getCurrentWeek();
 
-      const systemPrompt =
-        'You are an expert vegetable gardener assistant. Analyse this garden bed photo.';
+      const stagesByCrop = plants.reduce((acc, p) => {
+        const key = `${p.name} (${p.variety})`;
+        if (!acc[key]) {
+          acc[key] = computeStage(p.planted_date, p.stage_thresholds);
+        }
+        return acc;
+      }, {});
+      const expectedStageText = Object.entries(stagesByCrop)
+        .map(([crop, stage]) => `${crop}: ${stage}`)
+        .join(', ');
 
-      const userPrompt = `The bed contains: ${cropList}.
+      const systemPrompt =
+        'You are an expert vegetable gardener assistant specialising in cool-climate home growing in Melbourne, Australia (outer suburbs, Eltham — USDA zone 10a, mild frosts June–July). Analyse this garden bed photo.';
+
+      const userPrompt = `If this image does not show a garden bed or plants, return: {"error": "not a garden image"} and nothing else.
+
+The bed contains: ${cropList}.
 Planted on: ${plantedDate}.
 Current week: ${currentWeek}.
-Expected growth stage: ${expectedStage}.
+Expected growth stages: ${expectedStageText}.
 Return a JSON object with these exact keys:
 {
   "health_score": 1-10,
   "health_summary": "string (1 sentence)",
-  "observed_stage": "one of SEEDED|GERMINATING|SEEDLING|GROWING|FLOWERING|HARVEST_READY|OVERDUE",
+  "observed_stage": "one of SEEDED|GERMINATING|SEEDLING|GROWING|HEADING|FLOWERING|HARVEST_READY|OVERDUE",
   "stage_matches_expected": true/false,
   "issues_detected": ["string array, empty if none"],
   "harvest_estimate": "string e.g. '3-4 weeks' or 'Ready now' or 'Not applicable'",
@@ -572,9 +636,7 @@ Return ONLY the JSON object. No preamble, no markdown.`;
       const imageBase64 = req.file.buffer.toString('base64');
       const imageMediaType = req.file.mimetype || 'image/jpeg';
 
-      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-      const response = await client.messages.create({
+      const response = await anthropicClient.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
         system: systemPrompt,
@@ -597,7 +659,12 @@ Return ONLY the JSON object. No preamble, no markdown.`;
       });
 
       const resultText = response.content[0].text;
-      const result = JSON.parse(resultText);
+      let result;
+      try {
+        result = JSON.parse(resultText);
+      } catch (_) {
+        return res.status(500).json({ error: 'Model returned non-JSON response', raw: resultText.slice(0, 300) });
+      }
 
       const created_at = new Date().toISOString();
       insertAnalysis.run(bed_id, imageBase64, JSON.stringify(result), created_at);
@@ -608,6 +675,15 @@ Return ONLY the JSON object. No preamble, no markdown.`;
       res.status(500).json({ error: 'Analysis failed', details: analysisErr.message });
     }
   });
+});
+
+// GET /api/tasks/bed/:bed_id
+app.get('/api/tasks/bed/:bed_id', (req, res) => {
+  const { bed_id } = req.params;
+  const bed = getBedById.get(bed_id);
+  if (!bed) return res.status(404).json({ error: 'Bed not found' });
+  const tasks = getAllTasksForBed.all(bed_id);
+  res.json(tasks);
 });
 
 // ─── Error handling middleware ─────────────────────────────────────────────────
