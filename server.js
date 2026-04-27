@@ -8,6 +8,8 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const multer = require('multer');
 const Anthropic = require('@anthropic-ai/sdk');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -65,9 +67,14 @@ function computeStage(plantedDate, thresholdsJson) {
 
 // ─── Database initialisation ──────────────────────────────────────────────────
 
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
-const db = new Database(DB_PATH);
+let db;
+try {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  db = new Database(DB_PATH);
+} catch (e) {
+  console.error('Failed to initialise database:', e.message);
+  process.exit(1);
+}
 db.pragma('journal_mode = WAL');
 
 db.exec(`
@@ -96,6 +103,20 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     bed_id TEXT, content TEXT, created_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS seed_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    variety TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    stage_thresholds TEXT NOT NULL DEFAULT '{}',
+    harvest_start_day INT NOT NULL DEFAULT 60,
+    harvest_end_day INT NOT NULL DEFAULT 120,
+    spacing_cm INT DEFAULT 20,
+    sow_depth_cm REAL DEFAULT 2,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
   );
 `);
 
@@ -315,6 +336,45 @@ if (bedCount === 0) {
   insertTask.run(21, null,  'Begin fortnightly Eco Booch on all spring crops', 0, null);
 }
 
+// ─── Seed types — seeded separately so they survive DB resets ─────────────────
+
+const seedTypesCount = db.prepare('SELECT COUNT(*) as cnt FROM seed_types').get().cnt;
+
+if (seedTypesCount === 0) {
+  const initSeedType = db.prepare(`
+    INSERT INTO seed_types (name, variety, category, stage_thresholds, harvest_start_day, harvest_end_day, spacing_cm, sow_depth_cm, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  initSeedType.run('Cauliflower', 'Tasty', 'brassica',
+    JSON.stringify({ SEEDLING: 14, GROWING: 60, HEADING: 100, HARVEST_READY: 140, OVERDUE: 180 }),
+    140, 168, 45, 1,
+    'Transplant seedlings at 45cm spacing. Tie outer leaves over curds when head begins forming to protect from frost and sun discolouration.');
+  initSeedType.run('Beetroot', 'Detroit', 'root',
+    JSON.stringify({ GERMINATING: 14, SEEDLING: 28, GROWING: 60, HARVEST_READY: 120, OVERDUE: 170 }),
+    119, 170, 10, 2,
+    'Sow direct in rows 10cm apart. Thin to 10cm when seedlings emerge. Harvest when shoulder reaches 4–5cm diameter.');
+  initSeedType.run('Broad Bean', 'Coles Early', 'legume',
+    JSON.stringify({ GERMINATING: 10, SEEDLING: 25, GROWING: 70, FLOWERING: 100, HARVEST_READY: 130, OVERDUE: 165 }),
+    130, 165, 20, 4,
+    'Sow direct at 20cm spacing, 4cm deep. Stake with 1.2m bamboo canes. Harvest when you can feel beans inside the pod.');
+  initSeedType.run('Carrot', 'Every Season', 'root',
+    JSON.stringify({ GERMINATING: 14, SEEDLING: 30, GROWING: 80, HARVEST_READY: 140, OVERDUE: 200 }),
+    147, 182, 15, 1,
+    'Sow direct in fine rows 15cm apart. Thin to 5cm spacing. Carrots improve in cool soil and hold well past harvest_ready.');
+  initSeedType.run('Lettuce', 'All Year', 'leaf',
+    JSON.stringify({ GERMINATING: 7, SEEDLING: 14, GROWING: 30, HARVEST_READY: 55, OVERDUE: 200 }),
+    56, 9999, 20, 0.5,
+    'Transplant or sow direct. Cut-and-come-again. Harvest outer leaves continuously through winter.');
+  initSeedType.run('Sugar Pea', 'Sugar Snap', 'legume',
+    JSON.stringify({ GERMINATING: 12, SEEDLING: 20, GROWING: 55, FLOWERING: 75, HARVEST_READY: 77, OVERDUE: 120 }),
+    77, 133, 12, 2,
+    'Sow direct along trellis netting at 10–15cm spacing. Harvest daily when pods are plump and full.');
+  initSeedType.run('Spinach/Silverbeet/Kale', 'Mix', 'leaf',
+    JSON.stringify({ GERMINATING: 7, SEEDLING: 14, GROWING: 25, HARVEST_READY: 50, OVERDUE: 300 }),
+    45, 9999, 20, 1,
+    'Sow direct or transplant. Cut-and-come-again throughout the cool season. Overdue threshold is high — these crops continue producing indefinitely.');
+}
+
 // ─── Prepared queries ─────────────────────────────────────────────────────────
 
 const getAllBeds = db.prepare('SELECT * FROM beds ORDER BY id');
@@ -346,12 +406,23 @@ const deleteOldestNoteByBed = db.prepare(
 );
 const getNoteById = db.prepare('SELECT * FROM notes WHERE id = ?');
 const getAnalysisByBed = db.prepare(
-  'SELECT * FROM analysis_log WHERE bed_id = ? ORDER BY id DESC LIMIT 3'
+  'SELECT id, bed_id, result_json, created_at FROM analysis_log WHERE bed_id = ? ORDER BY id DESC LIMIT 3'
 );
 const insertAnalysis = db.prepare(
   'INSERT INTO analysis_log (bed_id, image_base64, result_json, created_at) VALUES (?, ?, ?, ?)'
 );
 const getBedById = db.prepare('SELECT * FROM beds WHERE id = ?');
+const getAllSeedTypes = db.prepare('SELECT * FROM seed_types ORDER BY name, variety');
+const getSeedTypeById = db.prepare('SELECT * FROM seed_types WHERE id = ?');
+const insertSeedTypeStmt = db.prepare(`
+  INSERT INTO seed_types (name, variety, category, stage_thresholds, harvest_start_day, harvest_end_day, spacing_cm, sow_depth_cm, notes, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+`);
+const updateSeedTypeStmt = db.prepare(`
+  UPDATE seed_types SET name=?, variety=?, category=?, stage_thresholds=?, harvest_start_day=?, harvest_end_day=?, spacing_cm=?, sow_depth_cm=?, notes=?, updated_at=datetime('now')
+  WHERE id=?
+`);
+const deleteSeedTypeStmt = db.prepare('DELETE FROM seed_types WHERE id = ?');
 const getTaskStatsByBed = db.prepare(
   `SELECT bed_id, COUNT(*) as total, SUM(is_complete) as completed
    FROM tasks WHERE bed_id IS NOT NULL GROUP BY bed_id`
@@ -362,6 +433,32 @@ const getAllTasksForBed = db.prepare(
 const getRecentFertiliserByBed = db.prepare(
   'SELECT product, applied_at FROM fertiliser_log WHERE bed_id = ? ORDER BY id DESC LIMIT 5'
 );
+
+// ─── Validation helpers ────────────────────────────────────────────────────────
+
+function isValidBedId(id) {
+  return typeof id === 'string' && /^[a-z0-9_-]{1,32}$/.test(id);
+}
+
+// Magic-byte image type detection — never trust client-supplied MIME headers
+const MAGIC_CHECKS = [
+  { mime: 'image/jpeg', check: (b) => b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF },
+  { mime: 'image/png',  check: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 },
+  { mime: 'image/gif',  check: (b) => b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 },
+  { mime: 'image/webp', check: (b) => b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+                                      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 },
+  // HEIC/HEIF: ISO base media file — 'ftyp' box at offset 4 with known HEIC brands
+  { mime: 'image/heic', check: (b) => b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70 &&
+                                      ['heic','heix','hevc','hevx','mif1'].includes(b.slice(8, 12).toString('ascii')) },
+];
+
+function detectImageMagicType(buffer) {
+  if (!buffer || buffer.length < 12) return null;
+  for (const { mime, check } of MAGIC_CHECKS) {
+    if (check(buffer)) return mime;
+  }
+  return null;
+}
 
 // ─── Bed helper ───────────────────────────────────────────────────────────────
 
@@ -393,9 +490,23 @@ function enrichBed(bed) {
 // ─── Express app ──────────────────────────────────────────────────────────────
 
 const app = express();
+app.use(helmet());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: false }));
+
+// Block cross-origin requests — local single-user tool, no cross-origin callers expected
+app.use((req, res, next) => {
+  if (req.get('Origin')) return res.status(403).json({ error: 'Cross-origin requests not allowed' });
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Rate limiting
+const analyseLimiter = rateLimit({ windowMs: 60_000, max: 10, message: { error: 'Too many requests — try again in a minute' } });
+const apiLimiter = rateLimit({ windowMs: 60_000, max: 200, message: { error: 'Too many requests' } });
+app.use('/api/analyse', analyseLimiter);
+app.use('/api/', apiLimiter);
 
 // Multer — memory storage, single image field, 10 MB limit, image types only
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif']);
@@ -514,6 +625,9 @@ app.post('/api/fertiliser/apply', (req, res) => {
   if (!bed_id) {
     return res.status(400).json({ error: 'bed_id is required' });
   }
+  if (!isValidBedId(bed_id)) {
+    return res.status(400).json({ error: 'Invalid bed_id' });
+  }
   const bed = getBedById.get(bed_id);
   if (!bed) {
     return res.status(404).json({ error: 'Bed not found' });
@@ -527,6 +641,7 @@ app.post('/api/fertiliser/apply', (req, res) => {
 // GET /api/notes/:bed_id
 app.get('/api/notes/:bed_id', (req, res) => {
   const { bed_id } = req.params;
+  if (!isValidBedId(bed_id)) return res.status(400).json({ error: 'Invalid bed_id' });
   const bed = getBedById.get(bed_id);
   if (!bed) return res.status(404).json({ error: 'Bed not found' });
   const notes = getNotesByBed.all(bed_id);
@@ -536,6 +651,7 @@ app.get('/api/notes/:bed_id', (req, res) => {
 // POST /api/notes/:bed_id
 app.post('/api/notes/:bed_id', (req, res) => {
   const { bed_id } = req.params;
+  if (!isValidBedId(bed_id)) return res.status(400).json({ error: 'Invalid bed_id' });
   const { content } = req.body;
   if (!content || typeof content !== 'string' || content.trim() === '') {
     return res.status(400).json({ error: 'content is required' });
@@ -563,6 +679,7 @@ app.post('/api/notes/:bed_id', (req, res) => {
 // GET /api/analysis/:bed_id
 app.get('/api/analysis/:bed_id', (req, res) => {
   const { bed_id } = req.params;
+  if (!isValidBedId(bed_id)) return res.status(400).json({ error: 'Invalid bed_id' });
   const bed = getBedById.get(bed_id);
   if (!bed) return res.status(404).json({ error: 'Bed not found' });
   const analyses = getAnalysisByBed.all(bed_id);
@@ -576,7 +693,13 @@ app.post('/api/analyse', (req, res) => {
   }
   upload(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({ error: err.message });
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'File too large — 10 MB maximum' });
+      }
+      if (err && typeof err.message === 'string' && err.message.startsWith('Invalid file type')) {
+        return res.status(400).json({ error: err.message });
+      }
+      return res.status(400).json({ error: 'Invalid upload' });
     }
     if (!req.file) {
       return res.status(400).json({ error: 'image file is required' });
@@ -586,10 +709,18 @@ app.post('/api/analyse', (req, res) => {
     if (!bed_id) {
       return res.status(400).json({ error: 'bed_id is required' });
     }
+    if (!isValidBedId(bed_id)) {
+      return res.status(400).json({ error: 'Invalid bed_id' });
+    }
 
     const bed = getBedById.get(bed_id);
     if (!bed) {
       return res.status(404).json({ error: 'Bed not found' });
+    }
+
+    const detectedType = detectImageMagicType(req.file.buffer);
+    if (!detectedType) {
+      return res.status(400).json({ error: 'File content is not a supported image format (JPEG, PNG, GIF, WebP, HEIC)' });
     }
 
     try {
@@ -635,7 +766,7 @@ Return a JSON object with these exact keys:
 Return ONLY the JSON object. No preamble, no markdown.`;
 
       const imageBase64 = req.file.buffer.toString('base64');
-      const imageMediaType = req.file.mimetype || 'image/jpeg';
+      const imageMediaType = detectedType;
 
       const response = await anthropicClient.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -673,7 +804,7 @@ Return ONLY the JSON object. No preamble, no markdown.`;
       res.json(result);
     } catch (analysisErr) {
       console.error('Analysis error:', analysisErr);
-      res.status(500).json({ error: 'Analysis failed', details: analysisErr.message });
+      res.status(500).json({ error: 'Analysis failed' });
     }
   });
 });
@@ -681,10 +812,123 @@ Return ONLY the JSON object. No preamble, no markdown.`;
 // GET /api/tasks/bed/:bed_id
 app.get('/api/tasks/bed/:bed_id', (req, res) => {
   const { bed_id } = req.params;
+  if (!isValidBedId(bed_id)) return res.status(400).json({ error: 'Invalid bed_id' });
   const bed = getBedById.get(bed_id);
   if (!bed) return res.status(404).json({ error: 'Bed not found' });
   const tasks = getAllTasksForBed.all(bed_id);
   res.json(tasks);
+});
+
+// ─── Seed types CRUD ──────────────────────────────────────────────────────────
+
+function parseSeedTypeBody(body) {
+  const name = (body.name || '').trim();
+  const variety = (body.variety || '').trim();
+  const category = (body.category || '').trim();
+  const notes = (body.notes || '').trim();
+  const harvest_start_day = parseInt(body.harvest_start_day, 10);
+  const harvest_end_day = parseInt(body.harvest_end_day, 10);
+  const spacing_cm = parseInt(body.spacing_cm, 10) || 20;
+  const sow_depth_cm = parseFloat(body.sow_depth_cm) || 2;
+
+  if (!name) return { error: 'name is required' };
+  if (name.length > 80) return { error: 'name must be 80 characters or fewer' };
+  if (isNaN(harvest_start_day) || harvest_start_day < 0) return { error: 'harvest_start_day must be a non-negative integer' };
+  if (isNaN(harvest_end_day) || harvest_end_day < harvest_start_day) return { error: 'harvest_end_day must be >= harvest_start_day' };
+
+  let stage_thresholds = body.stage_thresholds || '{}';
+  if (typeof stage_thresholds === 'string') {
+    try { JSON.parse(stage_thresholds); } catch (_) { return { error: 'stage_thresholds must be valid JSON' }; }
+  } else {
+    stage_thresholds = JSON.stringify(stage_thresholds);
+  }
+
+  return { name, variety, category, stage_thresholds, harvest_start_day, harvest_end_day, spacing_cm, sow_depth_cm, notes };
+}
+
+// GET /api/seed-types
+app.get('/api/seed-types', (_req, res) => {
+  res.json(getAllSeedTypes.all());
+});
+
+// POST /api/seed-types
+app.post('/api/seed-types', (req, res) => {
+  const parsed = parseSeedTypeBody(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { name, variety, category, stage_thresholds, harvest_start_day, harvest_end_day, spacing_cm, sow_depth_cm, notes } = parsed;
+  const result = insertSeedTypeStmt.run(name, variety, category, stage_thresholds, harvest_start_day, harvest_end_day, spacing_cm, sow_depth_cm, notes);
+  res.status(201).json(getSeedTypeById.get(result.lastInsertRowid));
+});
+
+// PUT /api/seed-types/:id
+app.put('/api/seed-types/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
+  if (!getSeedTypeById.get(id)) return res.status(404).json({ error: 'Seed type not found' });
+  const parsed = parseSeedTypeBody(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { name, variety, category, stage_thresholds, harvest_start_day, harvest_end_day, spacing_cm, sow_depth_cm, notes } = parsed;
+  updateSeedTypeStmt.run(name, variety, category, stage_thresholds, harvest_start_day, harvest_end_day, spacing_cm, sow_depth_cm, notes, id);
+  res.json(getSeedTypeById.get(id));
+});
+
+// DELETE /api/seed-types/:id
+app.delete('/api/seed-types/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
+  if (!getSeedTypeById.get(id)) return res.status(404).json({ error: 'Seed type not found' });
+  deleteSeedTypeStmt.run(id);
+  res.json({ deleted: true });
+});
+
+// POST /api/seed-types/ai-suggest
+app.post('/api/seed-types/ai-suggest', async (req, res) => {
+  if (!anthropicClient) return res.status(503).json({ error: 'AI unavailable — set ANTHROPIC_API_KEY to enable' });
+  const name = (req.body.name || '').trim();
+  const variety = (req.body.variety || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+
+  const prompt = `You are an expert vegetable gardener for cool-climate Melbourne, Australia (Eltham, zone 10a — mild frosts June–July, cool but not severe winters, season start late April).
+
+Generate planting data for: ${name}${variety ? ` (variety: ${variety})` : ''}.
+
+Return ONLY a JSON object with these exact keys — no preamble, no markdown:
+{
+  "category": "one of: brassica, root, legume, leaf, fruit, allium, herb, other",
+  "stage_thresholds": {
+    "GERMINATING": <days from sow to germination, omit if transplant>,
+    "SEEDLING": <days>,
+    "GROWING": <days>,
+    "FLOWERING": <days, omit if plant does not flower before harvest>,
+    "HEADING": <days, brassicas that form a head only>,
+    "HARVEST_READY": <days>,
+    "OVERDUE": <days — when quality degrades or plant bolts>
+  },
+  "harvest_start_day": <number, same as or slightly before HARVEST_READY>,
+  "harvest_end_day": <number, or 9999 for cut-and-come-again crops>,
+  "spacing_cm": <number>,
+  "sow_depth_cm": <number>,
+  "notes": "2–3 sentences on sowing method, support, harvest cues for Eltham cool climate"
+}`;
+
+  try {
+    const response = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const raw = response.content[0].text;
+    let suggestion;
+    try {
+      suggestion = JSON.parse(raw);
+    } catch (_) {
+      return res.status(500).json({ error: 'AI returned non-JSON response', raw: raw.slice(0, 300) });
+    }
+    res.json(suggestion);
+  } catch (err) {
+    console.error('AI suggest error:', err);
+    res.status(500).json({ error: 'AI suggestion failed' });
+  }
 });
 
 // ─── Error handling middleware ─────────────────────────────────────────────────

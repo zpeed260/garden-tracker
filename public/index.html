@@ -305,6 +305,7 @@ button.analysis-hist-header{border:none;width:100%;text-align:left;font:inherit;
     <section id="tab-beds" class="tab-content"></section>
     <section id="tab-fertiliser" class="tab-content"></section>
     <section id="tab-analysis" class="tab-content"></section>
+    <section id="tab-admin" class="tab-content"></section>
   </div>
   <nav id="bottom-nav" aria-label="Main navigation">
     <button class="nav-tab active" data-tab="dashboard" onclick="switchTab('dashboard')">
@@ -318,6 +319,9 @@ button.analysis-hist-header{border:none;width:100%;text-align:left;font:inherit;
     </button>
     <button class="nav-tab" data-tab="analysis" onclick="switchTab('analysis')">
       <span class="nav-icon">📷</span><span>AI Analysis</span>
+    </button>
+    <button class="nav-tab" data-tab="admin" onclick="switchTab('admin')">
+      <span class="nav-icon">⚙️</span><span>Admin</span>
     </button>
   </nav>
 </div>
@@ -467,6 +471,7 @@ function switchTab(tab) {
   else if (tab === 'beds') renderBeds();
   else if (tab === 'fertiliser') loadAndRenderFertiliser();
   else if (tab === 'analysis') renderAnalysisTab();
+  else if (tab === 'admin') loadAndRenderAdmin();
 }
 
 function selectBedAndSwitch(bedId) {
@@ -555,14 +560,14 @@ function buildBedCard(bed, s) {
 
   return `<div class="bed-card" onclick="selectBedAndSwitch('${bed.id}')">
     <div class="bed-card-top">
-      <span class="bed-card-name">${bed.name}</span>
+      <span class="bed-card-name">${escHtml(bed.name)}</span>
       <span class="status-dot">${dot}</span>
     </div>
     <div class="bed-card-mid">
       <span class="crop-emojis">${emojis}</span>
       ${ringSvg}
     </div>
-    <div class="stage-badge" style="background:${stageColor}">${stageLabel}</div>
+    <div class="stage-badge" style="background:${stageColor}">${escHtml(stageLabel)}</div>
   </div>`;
 }
 
@@ -570,7 +575,7 @@ function buildTaskRow(task) {
   const checked = task.is_complete ? 'checked' : '';
   const completedCls = task.is_complete ? 'completed' : '';
   const bedLabel = task.bed_id
-    ? `<span class="bed-pill">${task.bed_id.replace('bed', 'Bed ')}</span>`
+    ? `<span class="bed-pill">${escHtml(task.bed_id.replace('bed', 'Bed '))}</span>`
     : '<span class="bed-pill general">All Beds</span>';
   const timeLabel = task.is_complete && task.completed_at
     ? `<span class="completed-time">${fmtDateTime(task.completed_at)}</span>` : '';
@@ -811,11 +816,11 @@ function showPlantModal(plantId, bedId) {
     <div class="modal-plant-header">
       <span class="modal-plant-emoji">${emoji}</span>
       <div>
-        <div class="modal-plant-name">${plant.name}</div>
-        <div class="modal-plant-variety">${plant.variety}</div>
+        <div class="modal-plant-name">${escHtml(plant.name)}</div>
+        <div class="modal-plant-variety">${escHtml(plant.variety)}</div>
       </div>
     </div>
-    <div class="modal-stage-badge" style="background:${color}">${STAGE_LABELS[plant.stage] || plant.stage}</div>
+    <div class="modal-stage-badge" style="background:${color}">${STAGE_LABELS[plant.stage] || escHtml(plant.stage)}</div>
     <div class="modal-stats">
       <div class="modal-stat">
         <div class="modal-stat-label">Days since sown</div>
@@ -1313,6 +1318,265 @@ function buildHealthDial(score) {
     <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="22" font-weight="700" fill="${color}">${score}</text>
     <text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="10" fill="#aaa">/10</text>
   </svg>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADMIN TAB — Seed Type Management
+// ═══════════════════════════════════════════════════════════════
+
+let adminSeedTypes = [];
+let adminEditId = null; // null = add mode, number = edit mode
+
+const CATEGORY_OPTIONS = ['brassica','root','legume','leaf','fruit','allium','herb','other'];
+const STAGE_KEYS = ['GERMINATING','SEEDLING','GROWING','FLOWERING','HEADING','HARVEST_READY','OVERDUE'];
+
+async function loadAndRenderAdmin() {
+  const el = document.getElementById('tab-admin');
+  el.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
+  try {
+    adminSeedTypes = await fetchJSON('/api/seed-types');
+    adminEditId = null;
+    renderAdmin();
+  } catch (e) {
+    el.innerHTML = `<div style="padding:24px;color:#c00">Failed to load seed types: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderAdmin() {
+  const el = document.getElementById('tab-admin');
+  const listHtml = adminSeedTypes.length === 0
+    ? '<p style="color:#888;font-style:italic;margin:16px 0">No seed types yet. Add one below.</p>'
+    : `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:2px solid #e8e8e0">
+            <th style="text-align:left;padding:8px 6px">Name</th>
+            <th style="text-align:left;padding:8px 6px">Variety</th>
+            <th style="text-align:left;padding:8px 6px">Category</th>
+            <th style="text-align:right;padding:8px 6px">Harvest day</th>
+            <th style="text-align:right;padding:8px 6px">Spacing</th>
+            <th style="padding:8px 6px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${adminSeedTypes.map(st => `
+            <tr style="border-bottom:1px solid #eeede8" data-id="${st.id}">
+              <td style="padding:8px 6px;font-weight:600">${escHtml(st.name)}</td>
+              <td style="padding:8px 6px;color:#666">${escHtml(st.variety)}</td>
+              <td style="padding:8px 6px"><span style="background:#e8f5e9;color:#2e7d32;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600">${escHtml(st.category)}</span></td>
+              <td style="padding:8px 6px;text-align:right;color:#666">${st.harvest_start_day}–${st.harvest_end_day === 9999 ? '∞' : st.harvest_end_day}</td>
+              <td style="padding:8px 6px;text-align:right;color:#666">${st.spacing_cm}cm</td>
+              <td style="padding:8px 6px;white-space:nowrap">
+                <button onclick="startEditSeedType(${st.id})" style="${btnStyle('#4caf50','#fff')}">Edit</button>
+                <button onclick="deleteSeedType(${st.id})" style="${btnStyle('#fff','#c00')};border:1px solid #fcc;margin-left:4px">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+
+  el.innerHTML = `
+    <h2 style="font-size:18px;font-weight:700;margin:0 0 4px">Seed Type Library</h2>
+    <p style="font-size:13px;color:#888;margin:0 0 16px">Manage plant varieties, growth thresholds, and spacing. AI can suggest values for new crops.</p>
+    ${listHtml}
+    <hr style="margin:20px 0;border:none;border-top:1px solid #e8e8e0">
+    <div id="admin-form-container">
+      ${renderSeedTypeForm(null)}
+    </div>`;
+}
+
+function btnStyle(bg, color) {
+  return `background:${bg};color:${color};border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer`;
+}
+
+function startEditSeedType(id) {
+  const st = adminSeedTypes.find(s => s.id === id);
+  if (!st) return;
+  adminEditId = id;
+  document.getElementById('admin-form-container').innerHTML = renderSeedTypeForm(st);
+  document.getElementById('admin-form-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderSeedTypeForm(st) {
+  const isEdit = !!st;
+  let thresholds = {};
+  if (st) {
+    try { thresholds = JSON.parse(st.stage_thresholds); } catch (_) {}
+  }
+  const categorySelect = CATEGORY_OPTIONS.map(c =>
+    `<option value="${c}" ${(st && st.category === c) ? 'selected' : ''}>${c}</option>`
+  ).join('');
+  const thresholdInputs = STAGE_KEYS.map(k => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <label style="font-size:12px;font-weight:600;width:120px;color:#555">${k}</label>
+      <input type="number" min="0" name="thresh_${k}" placeholder="omit" value="${thresholds[k] !== undefined ? thresholds[k] : ''}"
+        style="width:80px;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+      <span style="font-size:11px;color:#aaa">days</span>
+    </div>`).join('');
+
+  return `
+    <h3 style="font-size:15px;font-weight:700;margin:0 0 12px">${isEdit ? 'Edit: ' + escHtml(st.name) : 'Add New Seed Type'}</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Plant name *</label>
+        <input id="sf-name" type="text" value="${isEdit ? escHtml(st.name) : ''}" placeholder="e.g. Tomato"
+          style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Variety</label>
+        <input id="sf-variety" type="text" value="${isEdit ? escHtml(st.variety) : ''}" placeholder="e.g. Roma"
+          style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Category</label>
+        <select id="sf-category" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+          ${categorySelect}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Spacing (cm)</label>
+        <input id="sf-spacing" type="number" min="1" value="${isEdit ? st.spacing_cm : 20}"
+          style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Sow depth (cm)</label>
+        <input id="sf-depth" type="number" min="0" step="0.5" value="${isEdit ? st.sow_depth_cm : 2}"
+          style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Harvest start day *</label>
+        <input id="sf-hstart" type="number" min="0" value="${isEdit ? st.harvest_start_day : 60}"
+          style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Harvest end day (9999=∞) *</label>
+        <input id="sf-hend" type="number" min="0" value="${isEdit ? st.harvest_end_day : 120}"
+          style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:8px">Stage thresholds (days from sow)</label>
+      ${thresholdInputs}
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Notes</label>
+      <textarea id="sf-notes" rows="3" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box">${isEdit ? escHtml(st.notes) : ''}</textarea>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="aiSuggestSeedType()" style="${btnStyle('#7b1fa2','#fff')}">AI Suggest</button>
+      <button onclick="saveSeedType(${isEdit ? st.id : 'null'})" style="${btnStyle('#388e3c','#fff')};padding:8px 18px;font-size:14px">${isEdit ? 'Save Changes' : 'Add Seed Type'}</button>
+      ${isEdit ? `<button onclick="cancelEditSeedType()" style="${btnStyle('#f5f5f5','#555')};padding:8px 14px">Cancel</button>` : ''}
+    </div>
+    <div id="sf-error" style="color:#c00;font-size:13px;margin-top:8px"></div>`;
+}
+
+function cancelEditSeedType() {
+  adminEditId = null;
+  document.getElementById('admin-form-container').innerHTML = renderSeedTypeForm(null);
+}
+
+function collectFormData() {
+  const thresholds = {};
+  for (const k of STAGE_KEYS) {
+    const val = parseInt(document.querySelector(`[name="thresh_${k}"]`).value, 10);
+    if (!isNaN(val)) thresholds[k] = val;
+  }
+  return {
+    name: document.getElementById('sf-name').value.trim(),
+    variety: document.getElementById('sf-variety').value.trim(),
+    category: document.getElementById('sf-category').value,
+    spacing_cm: document.getElementById('sf-spacing').value,
+    sow_depth_cm: document.getElementById('sf-depth').value,
+    harvest_start_day: document.getElementById('sf-hstart').value,
+    harvest_end_day: document.getElementById('sf-hend').value,
+    notes: document.getElementById('sf-notes').value.trim(),
+    stage_thresholds: JSON.stringify(thresholds),
+  };
+}
+
+async function aiSuggestSeedType() {
+  const name = document.getElementById('sf-name').value.trim();
+  const variety = document.getElementById('sf-variety').value.trim();
+  if (!name) { document.getElementById('sf-error').textContent = 'Enter a plant name first.'; return; }
+  const btn = document.querySelector('[onclick="aiSuggestSeedType()"]');
+  btn.textContent = 'Thinking...';
+  btn.disabled = true;
+  document.getElementById('sf-error').textContent = '';
+  try {
+    const suggestion = await postJSON('/api/seed-types/ai-suggest', { name, variety });
+    if (suggestion.category && CATEGORY_OPTIONS.includes(suggestion.category)) {
+      document.getElementById('sf-category').value = suggestion.category;
+    }
+    if (suggestion.harvest_start_day) document.getElementById('sf-hstart').value = suggestion.harvest_start_day;
+    if (suggestion.harvest_end_day) document.getElementById('sf-hend').value = suggestion.harvest_end_day;
+    if (suggestion.spacing_cm) document.getElementById('sf-spacing').value = suggestion.spacing_cm;
+    if (suggestion.sow_depth_cm) document.getElementById('sf-depth').value = suggestion.sow_depth_cm;
+    if (suggestion.notes) document.getElementById('sf-notes').value = suggestion.notes;
+    if (suggestion.stage_thresholds) {
+      for (const k of STAGE_KEYS) {
+        const inp = document.querySelector(`[name="thresh_${k}"]`);
+        if (inp) inp.value = suggestion.stage_thresholds[k] !== undefined ? suggestion.stage_thresholds[k] : '';
+      }
+    }
+    showToast('AI suggestion applied — review and save');
+  } catch (e) {
+    document.getElementById('sf-error').textContent = 'AI suggest failed: ' + e.message;
+  } finally {
+    btn.textContent = 'AI Suggest';
+    btn.disabled = false;
+  }
+}
+
+async function saveSeedType(editId) {
+  const data = collectFormData();
+  document.getElementById('sf-error').textContent = '';
+  try {
+    if (editId) {
+      await putJSON(`/api/seed-types/${editId}`, data);
+    } else {
+      await postJSON('/api/seed-types', data);
+    }
+    showToast(editId ? 'Seed type updated' : 'Seed type added');
+    await loadAndRenderAdmin();
+  } catch (e) {
+    document.getElementById('sf-error').textContent = e.message;
+  }
+}
+
+async function deleteSeedType(id) {
+  const st = adminSeedTypes.find(s => s.id === id);
+  if (!st) return;
+  if (!confirm(`Delete "${st.name} (${st.variety})"? This cannot be undone.`)) return;
+  try {
+    await deleteJSON(`/api/seed-types/${id}`);
+    showToast('Seed type deleted');
+    await loadAndRenderAdmin();
+  } catch (e) {
+    showToast('Delete failed: ' + e.message);
+  }
+}
+
+// Fetch helpers for admin (POST/PUT/DELETE with JSON)
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const json = await r.json();
+  if (!r.ok) throw new Error(json.error || r.statusText);
+  return json;
+}
+async function putJSON(url, body) {
+  const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const json = await r.json();
+  if (!r.ok) throw new Error(json.error || r.statusText);
+  return json;
+}
+async function deleteJSON(url) {
+  const r = await fetch(url, { method: 'DELETE' });
+  const json = await r.json();
+  if (!r.ok) throw new Error(json.error || r.statusText);
+  return json;
 }
 
 // ═══════════════════════════════════════════════════════════════
