@@ -37,7 +37,11 @@ const anthropicClient = process.env.ANTHROPIC_API_KEY
 
 // ─── Stage computation ────────────────────────────────────────────────────────
 
+// A plant with no planted_date has not yet been sown — its stage is SEEDED and
+// no time-based progression is calculated. Once the user marks the plant as sown
+// (per-plant or bulk sow-all-in-bed), planted_date is stamped and the timer begins.
 function computeStage(plantedDate, thresholdsJson) {
+  if (!plantedDate) return 'SEEDED';
   let thresholds;
   try {
     thresholds = JSON.parse(thresholdsJson);
@@ -145,7 +149,9 @@ if (bedCount === 0) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
-  const PLANTED = '2026-04-27';
+  // planted_date is intentionally NULL — timers only start when the user
+  // marks each plant as sown (per-plant) or uses the bulk "sow all" action.
+  const PLANTED = null;
 
   const cauli_thresholds = JSON.stringify({
     SEEDLING: 14, GROWING: 60, HEADING: 100,
@@ -400,9 +406,15 @@ const getNotesByBed = db.prepare(
 const insertNote = db.prepare(
   'INSERT INTO notes (bed_id, content, created_at) VALUES (?, ?, ?)'
 );
-const countNotesByBed = db.prepare('SELECT COUNT(*) as cnt FROM notes WHERE bed_id = ?');
-const deleteOldestNoteByBed = db.prepare(
-  'DELETE FROM notes WHERE id = (SELECT id FROM notes WHERE bed_id = ? ORDER BY id ASC LIMIT 1)'
+// Single-statement trim: keep the 10 newest notes for the bed and delete the rest.
+// Replaces a count-then-delete pair that could leave an off-by-one extra row
+// under concurrent writes.
+const trimNotesToTen = db.prepare(
+  `DELETE FROM notes
+   WHERE bed_id = ?
+     AND id NOT IN (
+       SELECT id FROM notes WHERE bed_id = ? ORDER BY id DESC LIMIT 10
+     )`
 );
 const getNoteById = db.prepare('SELECT * FROM notes WHERE id = ?');
 const getAnalysisByBed = db.prepare(
@@ -434,6 +446,34 @@ const getRecentFertiliserByBed = db.prepare(
   'SELECT product, applied_at FROM fertiliser_log WHERE bed_id = ? ORDER BY id DESC LIMIT 5'
 );
 
+const getPlantById = db.prepare('SELECT * FROM plants WHERE id = ?');
+const updatePlantPlantedDate = db.prepare(
+  'UPDATE plants SET planted_date = ? WHERE id = ?'
+);
+const sowAllUnsownInBed = db.prepare(
+  'UPDATE plants SET planted_date = ? WHERE bed_id = ? AND planted_date IS NULL'
+);
+
+// ─── One-time migration: legacy hardcoded planted_date ───────────────────────
+//
+// Earlier seed data inserted every plant with planted_date='2026-04-27', causing
+// timers to advance regardless of whether the user had actually sown anything.
+// On first boot after this change, nullify any plant rows still carrying the
+// legacy date so the per-plant sow toggle becomes the source of truth.
+const LEGACY_PLANTED_DATE = '2026-04-27';
+try {
+  const result = db
+    .prepare('UPDATE plants SET planted_date = NULL WHERE planted_date = ?')
+    .run(LEGACY_PLANTED_DATE);
+  if (result.changes > 0) {
+    console.log(
+      `[migration] Cleared planted_date on ${result.changes} plant(s) seeded with the legacy hardcoded date — they will now wait for manual sowing.`
+    );
+  }
+} catch (e) {
+  console.error('[migration] Failed to clear legacy planted_date:', e.message);
+}
+
 // ─── Validation helpers ────────────────────────────────────────────────────────
 
 function isValidBedId(id) {
@@ -464,11 +504,14 @@ function detectImageMagicType(buffer) {
 
 function enrichBed(bed) {
   const plants = getPlantsByBed.all(bed.id).map((p) => {
-    const daysSincePlanted = Math.floor(
-      (Date.now() - new Date(p.planted_date).getTime()) / 86400000
-    );
+    const sown = !!p.planted_date;
+    const daysSincePlanted = sown
+      ? Math.floor((Date.now() - new Date(p.planted_date).getTime()) / 86400000)
+      : null;
     const stage = computeStage(p.planted_date, p.stage_thresholds);
-    const daysToHarvest = Math.max(0, p.harvest_start_day - daysSincePlanted);
+    const daysToHarvest = sown
+      ? Math.max(0, p.harvest_start_day - daysSincePlanted)
+      : null;
     return {
       id: p.id,
       name: p.name,
@@ -476,6 +519,7 @@ function enrichBed(bed) {
       grid_col: p.grid_col,
       grid_row: p.grid_row,
       planted_date: p.planted_date,
+      sown,
       stage,
       days_since_planted: daysSincePlanted,
       days_to_harvest: daysToHarvest,
@@ -484,7 +528,16 @@ function enrichBed(bed) {
       stage_thresholds: JSON.parse(p.stage_thresholds),
     };
   });
-  return { id: bed.id, name: bed.name, width_cm: bed.width_cm, height_cm: bed.height_cm, plants };
+  const sown_count = plants.filter((p) => p.sown).length;
+  return {
+    id: bed.id,
+    name: bed.name,
+    width_cm: bed.width_cm,
+    height_cm: bed.height_cm,
+    plants,
+    sown_count,
+    total_count: plants.length,
+  };
 }
 
 // ─── Express app ──────────────────────────────────────────────────────────────
@@ -528,7 +581,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Rate limiting
 const analyseLimiter = rateLimit({ windowMs: 60_000, max: 10, message: { error: 'Too many requests — try again in a minute' } });
 const apiLimiter = rateLimit({ windowMs: 60_000, max: 200, message: { error: 'Too many requests' } });
+// LLM-backed routes share the strict limiter to bound Anthropic spend; both
+// must be registered before the broader '/api/' limiter to take precedence.
 app.use('/api/analyse', analyseLimiter);
+app.use('/api/seed-types/ai-suggest', analyseLimiter);
 app.use('/api/', apiLimiter);
 
 // Multer — memory storage, single image field, 10 MB limit, image types only
@@ -548,10 +604,33 @@ const upload = multer({
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-// GET /health
+// GET /health — also probes the DB so a broken volume mount fails the check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  try {
+    db.prepare('SELECT 1 as ok').get();
+    res.json({ status: 'ok' });
+  } catch (e) {
+    res.status(503).json({ status: 'error', detail: 'database unavailable' });
+  }
 });
+
+// POST /api/test/reset — only available when DB_PATH contains "test"
+if ((process.env.DB_PATH || '').includes('test')) {
+  const deleteExtraSeedTypes = db.prepare(
+    `DELETE FROM seed_types WHERE name NOT IN
+     ('Beetroot','Broad Bean','Carrot','Cauliflower','Lettuce','Spinach/Silverbeet/Kale','Sugar Pea')`
+  );
+  const resetTasks = db.prepare(
+    'UPDATE tasks SET is_complete = 0, completed_at = NULL WHERE week_number > 0'
+  );
+  app.post('/api/test/reset', (_req, res) => {
+    db.exec('DELETE FROM fertiliser_log');
+    db.exec('DELETE FROM notes');
+    deleteExtraSeedTypes.run();
+    resetTasks.run();
+    res.json({ ok: true });
+  });
+}
 
 // GET /api/state
 app.get('/api/state', (req, res) => {
@@ -563,6 +642,7 @@ app.get('/api/state', (req, res) => {
 
   const currentTasks = getTasksByWeek.all(currentWeek);
   const overdueTasks = getIncompleteTasksBefore.all(currentWeek);
+  const nextWeekTasks = getTasksByWeek.all(currentWeek + 1);
   const taskStats = getTaskStatsByBed.all();
   const taskSummary = {};
   for (const s of taskStats) {
@@ -574,7 +654,7 @@ app.get('/api/state', (req, res) => {
     currentDate,
     fertiliser,
     beds,
-    tasks: { current: currentTasks, overdue: overdueTasks },
+    tasks: { current: currentTasks, overdue: overdueTasks, next: nextWeekTasks },
     taskSummary,
   });
 });
@@ -610,6 +690,38 @@ app.post('/api/tasks/:id/complete', (req, res) => {
   updateTaskComplete.run(newComplete, completedAt, id);
   const updated = getTaskById.get(id);
   res.json(updated);
+});
+
+// POST /api/plants/:id/sow — toggle a plant's sown state.
+// First click stamps planted_date with the current timestamp (timer starts).
+// Second click clears it back to NULL (timer resets to "not sown").
+app.post('/api/plants/:id/sow', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
+  const plant = getPlantById.get(id);
+  if (!plant) return res.status(404).json({ error: 'Plant not found' });
+  const newDate = plant.planted_date ? null : new Date().toISOString();
+  updatePlantPlantedDate.run(newDate, id);
+  const updated = getPlantById.get(id);
+  res.json({
+    id: updated.id,
+    bed_id: updated.bed_id,
+    planted_date: updated.planted_date,
+    sown: !!updated.planted_date,
+  });
+});
+
+// POST /api/beds/:bed_id/sow-all — bulk-sow every plant in the bed that does
+// not already have a planted_date. Convenience for users who sowed an entire
+// bed in one session and don't want to click each plant individually.
+app.post('/api/beds/:bed_id/sow-all', (req, res) => {
+  const { bed_id } = req.params;
+  if (!isValidBedId(bed_id)) return res.status(400).json({ error: 'Invalid bed_id' });
+  const bed = getBedById.get(bed_id);
+  if (!bed) return res.status(404).json({ error: 'Bed not found' });
+  const stamped_at = new Date().toISOString();
+  const result = sowAllUnsownInBed.run(stamped_at, bed_id);
+  res.json({ bed_id, sown_now: result.changes, stamped_at });
 });
 
 // GET /api/fertiliser
@@ -690,11 +802,8 @@ app.post('/api/notes/:bed_id', (req, res) => {
   const result = insertNote.run(bed_id, content.trim(), created_at);
   const saved = getNoteById.get(result.lastInsertRowid);
 
-  // Trim to most recent 10
-  const { cnt } = countNotesByBed.get(bed_id);
-  if (cnt > 10) {
-    deleteOldestNoteByBed.run(bed_id);
-  }
+  // Cap retained notes at 10 newest per bed.
+  trimNotesToTen.run(bed_id, bed_id);
 
   res.json(saved);
 });
@@ -751,8 +860,15 @@ app.post('/api/analyse', (req, res) => {
 
       // Build crop list and per-crop expected stages
       const cropList = [...new Set(plants.map((p) => `${p.name} (${p.variety})`))].join(', ');
-      const primaryPlant = plants[0] || null;
-      const plantedDate = primaryPlant ? primaryPlant.planted_date : 'unknown';
+      const sownPlants = plants.filter((p) => !!p.planted_date);
+      // Use the earliest sown date as the bed's reference for the AI prompt;
+      // beds with no sown plants tell the model the bed is freshly prepared.
+      const earliestSown = sownPlants
+        .map((p) => p.planted_date)
+        .sort()[0] || null;
+      const plantedDate = earliestSown
+        ? earliestSown.split('T')[0]
+        : 'not yet sown — bed is freshly prepared';
       const currentWeek = getCurrentWeek();
 
       const stagesByCrop = plants.reduce((acc, p) => {
@@ -907,8 +1023,16 @@ app.delete('/api/seed-types/:id', (req, res) => {
 // POST /api/seed-types/ai-suggest
 app.post('/api/seed-types/ai-suggest', async (req, res) => {
   if (!anthropicClient) return res.status(503).json({ error: 'AI unavailable — set ANTHROPIC_API_KEY to enable' });
-  const name = (req.body.name || '').trim();
-  const variety = (req.body.variety || '').trim();
+  // Strip control characters and bound length before interpolating into the
+  // prompt — prevents trivial prompt-injection attempts (newline-injected
+  // "Ignore above" instructions, bidi overrides, etc.) on a public-ish input.
+  const sanitisePromptInput = (s) =>
+    String(s || '')
+      .replace(/[\x00-\x1f\x7f]/g, ' ')
+      .trim()
+      .slice(0, 80);
+  const name = sanitisePromptInput(req.body.name);
+  const variety = sanitisePromptInput(req.body.variety);
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const prompt = `You are an expert vegetable gardener for cool-climate Melbourne, Australia (Eltham, zone 10a — mild frosts June–July, cool but not severe winters, season start late April).

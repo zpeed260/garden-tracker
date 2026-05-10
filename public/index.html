@@ -77,6 +77,7 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 /* ── Task rows ── */
 .overdue-section{background:rgba(212,134,10,0.08);border:1px solid rgba(212,134,10,0.2);border-radius:var(--radius);padding:12px;margin-bottom:16px}
 .current-section{background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
+.next-week-section{background:#fff;border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);opacity:0.55;margin-top:12px}
 .task-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.05)}
 .task-row:last-child{border-bottom:none}
 .task-row.completed .task-title{text-decoration:line-through;color:#aaa}
@@ -247,6 +248,16 @@ button.analysis-hist-header{border:none;width:100%;text-align:left;font:inherit;
 .modal-stat{background:var(--cream);border-radius:8px;padding:12px}
 .modal-stat-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px}
 .modal-stat-value{font-size:18px;font-weight:700;color:var(--green-dark)}
+.modal-stat-value.muted{color:#aaa;font-size:14px;font-weight:600}
+.sow-btn{display:block;width:100%;margin-top:14px;background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity 0.15s}
+.sow-btn:hover{opacity:0.88}
+.sow-btn.unsow{background:#fff;color:#888;border:1px solid #ddd}
+.sow-status-row{display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px;padding:10px 12px;background:var(--cream);border-radius:8px;font-size:13px}
+.sow-status-row .sow-text{color:#555;font-weight:600}
+.sow-status-row .sow-text.all-sown{color:var(--green-dark)}
+.sow-all-btn{background:var(--green-mid);color:#fff;border:none;border-radius:16px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.sow-all-btn:disabled{opacity:0.4;cursor:default}
+.sow-all-btn:hover:not(:disabled){opacity:0.88}
 
 /* ── Toast ── */
 #toast{position:fixed;bottom:calc(var(--nav-h) + 10px);left:50%;transform:translateX(-50%) translateY(12px);background:var(--green-dark);color:#fff;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity 0.2s,transform 0.2s;z-index:300;pointer-events:none;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
@@ -498,11 +509,19 @@ function renderDashboard() {
 
   const overdueTasks = s.tasks.overdue;
   const currentTasks = s.tasks.current;
+  const nextWeekTasks = s.tasks.next || [];
 
   const overdueHtml = overdueTasks.length > 0 ? `
     <div class="overdue-section">
       <div class="section-label amber">⚠ Overdue Tasks (${overdueTasks.length})</div>
       ${overdueTasks.map(t => buildTaskRow(t)).join('')}
+    </div>` : '';
+
+  const allCurrentDone = currentTasks.length > 0 && currentTasks.every(t => t.is_complete);
+  const nextWeekHtml = allCurrentDone && nextWeekTasks.length > 0 ? `
+    <div class="next-week-section">
+      <div class="section-label" style="color:#888">Coming up — Week ${week + 1}</div>
+      ${nextWeekTasks.map(t => buildTaskRow(t, true)).join('')}
     </div>` : '';
 
   document.getElementById('tab-dashboard').innerHTML = `
@@ -524,14 +543,20 @@ function renderDashboard() {
     <div class="current-section">
       <div class="section-label">Week ${week} Tasks</div>
       ${currentTasks.length ? currentTasks.map(t => buildTaskRow(t)).join('') : '<div class="empty-state">No tasks this week</div>'}
-    </div>`;
+    </div>
+    ${nextWeekHtml}`;
 }
 
 function buildBedCard(bed, s) {
-  const primaryPlant = bed.plants[0];
-  const stage = primaryPlant ? primaryPlant.stage : 'SEEDED';
-  const stageColor = STAGE_COLORS[stage] || '#ccc';
-  const stageLabel = STAGE_LABELS[stage] || stage;
+  // Pick the first sown plant as the badge representative; if no plants are sown,
+  // show a neutral "Not sown" badge instead of staying on the SEEDED default.
+  const sownPlant = bed.plants.find((p) => p.sown);
+  const allSown = bed.total_count > 0 && bed.sown_count === bed.total_count;
+  const stage = sownPlant ? sownPlant.stage : 'SEEDED';
+  const stageColor = sownPlant ? (STAGE_COLORS[stage] || '#ccc') : '#9aa0a6';
+  const stageLabel = sownPlant
+    ? (STAGE_LABELS[stage] || stage) + (allSown ? '' : ` · ${bed.sown_count}/${bed.total_count} sown`)
+    : 'Not sown yet';
 
   const uniqueNames = [...new Set(bed.plants.map(p => p.name))];
   const emojis = uniqueNames.map(n => CROP_EMOJIS[n] || '🌱').join('');
@@ -571,7 +596,7 @@ function buildBedCard(bed, s) {
   </div>`;
 }
 
-function buildTaskRow(task) {
+function buildTaskRow(task, preview = false) {
   const checked = task.is_complete ? 'checked' : '';
   const completedCls = task.is_complete ? 'completed' : '';
   const bedLabel = task.bed_id
@@ -579,13 +604,14 @@ function buildTaskRow(task) {
     : '<span class="bed-pill general">All Beds</span>';
   const timeLabel = task.is_complete && task.completed_at
     ? `<span class="completed-time">${fmtDateTime(task.completed_at)}</span>` : '';
-  const undoBtn = task.is_complete
+  const undoBtn = !preview && task.is_complete
     ? `<button class="undo-btn" onclick="toggleTask(${task.id});event.stopPropagation()">Undo</button>` : '';
+  const checkboxHtml = preview
+    ? `<span class="task-checkbox" style="pointer-events:none"></span>`
+    : `<button class="task-checkbox ${checked}" onclick="toggleTask(${task.id})">${task.is_complete ? '✓' : ''}</button>`;
 
   return `<div class="task-row ${completedCls}" id="task-row-${task.id}">
-    <button class="task-checkbox ${checked}" onclick="toggleTask(${task.id})">
-      ${task.is_complete ? '✓' : ''}
-    </button>
+    ${checkboxHtml}
     <div class="task-content">
       <div class="task-title">${escHtml(task.title)}</div>
       <div class="task-meta">${bedLabel}${timeLabel}</div>
@@ -687,6 +713,8 @@ async function loadBedDetail(bedId) {
           ${buildPlantMap(bed, isFrostLocked)}
         </div>
 
+        ${buildSowStatusRow(bed)}
+
         ${buildHarvestCountdown(bed)}
 
         <div class="tasks-section">
@@ -705,8 +733,13 @@ async function loadBedDetail(bedId) {
         </div>
       </div>`;
   } catch (e) {
-    document.getElementById('bed-detail').innerHTML =
-      `<div class="empty-state" style="padding:24px">Failed to load: ${e.message}</div>`;
+    const detail = document.getElementById('bed-detail');
+    detail.textContent = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'empty-state';
+    wrap.style.padding = '24px';
+    wrap.textContent = 'Failed to load: ' + e.message;
+    detail.appendChild(wrap);
   }
 }
 
@@ -752,20 +785,30 @@ function buildPlantMap(bed, isFrostLocked) {
   for (const plant of plants) {
     const cx = PAD + plant.grid_col * cellW + cellW / 2;
     const cy = PAD + plant.grid_row * cellH + cellH / 2;
-    const color = STAGE_COLORS[plant.stage] || '#ccc';
     const isOverdue = plant.stage === 'OVERDUE';
-    const stroke = isOverdue ? '#5a0000' : 'rgba(255,255,255,0.7)';
-    const sw = isOverdue ? 2.5 : 1.5;
+    const isUnsown = !plant.sown;
+    const fill = isUnsown ? '#e8e2d3' : (STAGE_COLORS[plant.stage] || '#ccc');
+    const stroke = isOverdue
+      ? '#5a0000'
+      : isUnsown ? '#a8a29a' : 'rgba(255,255,255,0.7)';
+    const sw = isOverdue ? 2.5 : isUnsown ? 1.2 : 1.5;
+    const dash = isUnsown ? ' stroke-dasharray="3,2"' : '';
+    const opacity = isUnsown ? ' opacity="0.55"' : '';
     const anim = isOverdue ? 'class="plant-circle overdue-pulse"' : 'class="plant-circle"';
     const emoji = CROP_EMOJIS[plant.name] || '•';
+    const stageLabel = isUnsown
+      ? 'Not sown'
+      : plant.stage.charAt(0) + plant.stage.slice(1).toLowerCase();
 
     inner += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
-      fill="${color}" stroke="${stroke}" stroke-width="${sw}" ${anim}
-      onclick="showPlantModal(${plant.id},'${bed.id}')" style="cursor:pointer"/>`;
+      fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dash}${opacity} ${anim}
+      onclick="showPlantModal(${plant.id},'${escHtml(bed.id)}')" style="cursor:pointer">
+      <title>${escHtml(plant.name)} (${escHtml(plant.variety)}) — ${escHtml(stageLabel)}</title>
+    </circle>`;
 
     const emojiSize = Math.max(r * 1.15, 8).toFixed(0);
     inner += `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle"
-      dominant-baseline="central" font-size="${emojiSize}"
+      dominant-baseline="central" font-size="${emojiSize}"${opacity}
       style="pointer-events:none;user-select:none">${emoji}</text>`;
   }
 
@@ -799,18 +842,33 @@ function showPlantModal(plantId, bedId) {
 
   const thresholds = plant.stage_thresholds;
   const days = plant.days_since_planted;
+  const isUnsown = !plant.sown;
+
+  // Next-stage projection only applies once the plant is sown.
   const stageOrder = ['GERMINATING', 'SEEDLING', 'GROWING', 'FLOWERING', 'HARVEST_READY', 'OVERDUE'];
   let nextStage = null;
   let daysToNext = null;
-  for (const s of stageOrder) {
-    if (thresholds[s] !== undefined && thresholds[s] > days) {
-      nextStage = s; daysToNext = thresholds[s] - days; break;
+  if (!isUnsown) {
+    for (const s of stageOrder) {
+      if (thresholds[s] !== undefined && thresholds[s] > days) {
+        nextStage = s; daysToNext = thresholds[s] - days; break;
+      }
     }
   }
 
-  const color = STAGE_COLORS[plant.stage] || '#ccc';
+  const badgeColor = isUnsown ? '#9aa0a6' : (STAGE_COLORS[plant.stage] || '#ccc');
+  const badgeText = isUnsown ? 'Not sown yet' : (STAGE_LABELS[plant.stage] || plant.stage);
   const emoji = CROP_EMOJIS[plant.name] || '🌱';
-  const harvestMsg = plant.days_to_harvest > 0 ? `${plant.days_to_harvest} days` : '🔔 Now!';
+  const daysCell = isUnsown
+    ? '<div class="modal-stat-value muted">—</div>'
+    : `<div class="modal-stat-value">${days}</div>`;
+  const harvestCell = isUnsown
+    ? '<div class="modal-stat-value muted">Not sown</div>'
+    : `<div class="modal-stat-value">${plant.days_to_harvest > 0 ? plant.days_to_harvest + ' days' : '🔔 Now!'}</div>`;
+
+  const sowBtn = isUnsown
+    ? `<button class="sow-btn" onclick="togglePlantSow(${plant.id},'${escHtml(bedId)}')">🌱 Mark as sown</button>`
+    : `<button class="sow-btn unsow" onclick="togglePlantSow(${plant.id},'${escHtml(bedId)}')">Undo sowing (started ${escHtml(fmtDate(plant.planted_date))})</button>`;
 
   showModal(`
     <div class="modal-plant-header">
@@ -820,11 +878,11 @@ function showPlantModal(plantId, bedId) {
         <div class="modal-plant-variety">${escHtml(plant.variety)}</div>
       </div>
     </div>
-    <div class="modal-stage-badge" style="background:${color}">${STAGE_LABELS[plant.stage] || escHtml(plant.stage)}</div>
+    <div class="modal-stage-badge" style="background:${badgeColor}">${escHtml(badgeText)}</div>
     <div class="modal-stats">
       <div class="modal-stat">
         <div class="modal-stat-label">Days since sown</div>
-        <div class="modal-stat-value">${days}</div>
+        ${daysCell}
       </div>
       ${nextStage ? `<div class="modal-stat">
         <div class="modal-stat-label">To ${STAGE_LABELS[nextStage]}</div>
@@ -832,13 +890,46 @@ function showPlantModal(plantId, bedId) {
       </div>` : ''}
       <div class="modal-stat">
         <div class="modal-stat-label">To harvest</div>
-        <div class="modal-stat-value">${harvestMsg}</div>
+        ${harvestCell}
       </div>
       <div class="modal-stat">
         <div class="modal-stat-label">Position</div>
         <div class="modal-stat-value" style="font-size:13px">C${plant.grid_col + 1} R${plant.grid_row + 1}</div>
       </div>
-    </div>`);
+    </div>
+    ${sowBtn}`);
+}
+
+async function togglePlantSow(plantId, bedId) {
+  try {
+    const updated = await postJSON('/api/plants/' + plantId + '/sow', {});
+    showToast(updated.sown ? '🌱 Marked as sown' : 'Sowing undone');
+    closeModal();
+    // Refresh state so stage / days propagate everywhere.
+    appState = await fetchJSON('/api/state');
+    delete bedTasksCache[bedId];
+    delete bedNotesCache[bedId];
+    delete bedAnalysisCache[bedId];
+    if (currentTab === 'dashboard') renderDashboard();
+    else if (currentTab === 'beds') loadBedDetail(bedId);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+async function sowAllInBed(bedId) {
+  if (!confirm('Mark every un-sown plant in this bed as sown today?')) return;
+  try {
+    const result = await postJSON('/api/beds/' + bedId + '/sow-all', {});
+    showToast(result.sown_now > 0
+      ? `🌱 Sowed ${result.sown_now} plant${result.sown_now === 1 ? '' : 's'}`
+      : 'Nothing to sow — all plants already sown');
+    appState = await fetchJSON('/api/state');
+    if (currentTab === 'dashboard') renderDashboard();
+    else if (currentTab === 'beds') loadBedDetail(bedId);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -848,21 +939,26 @@ function showPlantModal(plantId, bedId) {
 function buildHarvestCountdown(bed) {
   if (!bed.plants.length) return '';
 
-  const seen = new Set();
-  const crops = [];
+  // One representative card per crop, preferring a sown plant over an un-sown one.
+  const byName = new Map();
   for (const p of bed.plants) {
-    if (!seen.has(p.name)) { seen.add(p.name); crops.push(p); }
+    const existing = byName.get(p.name);
+    if (!existing || (!existing.sown && p.sown)) byName.set(p.name, p);
   }
+  const crops = [...byName.values()];
 
   const cards = crops.map(p => {
     const emoji = CROP_EMOJIS[p.name] || '🌱';
-    const overdue = p.stage === 'OVERDUE';
-    const ready = p.stage === 'HARVEST_READY';
-    const soon = !overdue && !ready && p.days_to_harvest <= 14 && p.days_to_harvest > 0;
+    const isUnsown = !p.sown;
+    const overdue = !isUnsown && p.stage === 'OVERDUE';
+    const ready = !isUnsown && p.stage === 'HARVEST_READY';
+    const soon = !isUnsown && !overdue && !ready && p.days_to_harvest <= 14 && p.days_to_harvest > 0;
 
     let cls = 'harvest-card';
     let msg = '';
-    if (overdue) {
+    if (isUnsown) {
+      msg = `<span class="days-label" style="color:#888">Not sown yet</span>`;
+    } else if (overdue) {
       cls += ' overdue-card';
       msg = `<span class="overdue-label">⚠ OVERDUE — harvest now!</span>`;
     } else if (ready) {
@@ -880,7 +976,7 @@ function buildHarvestCountdown(bed) {
     return `<div class="${cls}">
       <span class="harvest-icon">${emoji}</span>
       <div class="harvest-info">
-        <div class="harvest-name">${p.name} <span style="font-weight:400;font-size:12px;color:#888">${p.variety}</span></div>
+        <div class="harvest-name">${escHtml(p.name)} <span style="font-weight:400;font-size:12px;color:#888">${escHtml(p.variety)}</span></div>
         ${msg}
       </div>
     </div>`;
@@ -892,11 +988,25 @@ function buildHarvestCountdown(bed) {
   </div>`;
 }
 
+function buildSowStatusRow(bed) {
+  if (!bed.total_count) return '';
+  const remaining = bed.total_count - bed.sown_count;
+  if (remaining === 0) {
+    return `<div class="sow-status-row">
+      <span class="sow-text all-sown">🌱 All ${bed.total_count} plants sown</span>
+    </div>`;
+  }
+  return `<div class="sow-status-row">
+    <span class="sow-text">🌱 ${bed.sown_count} of ${bed.total_count} plants sown</span>
+    <button class="sow-all-btn" onclick="sowAllInBed('${escHtml(bed.id)}')">Sow remaining ${remaining}</button>
+  </div>`;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // BED TASK GROUPS
 // ═══════════════════════════════════════════════════════════════
 
-function buildBedTaskGroups(tasks, currentWeek) {
+function buildBedTaskGroups(tasks, currentWeek, forceExpandedWeeks) {
   if (!tasks.length) return '<div class="empty-state">No tasks for this bed</div>';
 
   const grouped = {};
@@ -912,7 +1022,13 @@ function buildBedTaskGroups(tasks, currentWeek) {
     const wTasks = grouped[w];
     const done = wTasks.filter(t => t.is_complete).length;
     const isCurrent = w === currentWeek;
-    const isExpanded = isCurrent || w >= currentWeek;
+    // Default: current and future weeks are expanded; past weeks collapsed.
+    // forceExpandedWeeks (a Set) overrides the default so a re-render preserves
+    // any past weeks the user manually expanded.
+    const defaultExpanded = isCurrent || w >= currentWeek;
+    const isExpanded = forceExpandedWeeks
+      ? forceExpandedWeeks.has(w)
+      : defaultExpanded;
 
     return `<div class="week-group ${isExpanded ? 'expanded' : 'collapsed'} ${isCurrent ? 'current-week' : ''}" id="wg-${w}">
       <button class="week-group-header" onclick="toggleWeekGroup(${w})">
@@ -939,8 +1055,16 @@ function toggleWeekGroup(w) {
 function rerenderBedTasks() {
   const list = document.getElementById('bed-tasks-list');
   if (!list) return;
+  // Capture which week-groups are currently expanded so the user's manual
+  // expand/collapse state survives a re-render (e.g. after toggling a task
+  // inside a past week).
+  const expandedWeeks = new Set();
+  list.querySelectorAll('.week-group.expanded').forEach((el) => {
+    const m = el.id && el.id.match(/^wg-(-?\d+)$/);
+    if (m) expandedWeeks.add(parseInt(m[1], 10));
+  });
   const tasks = bedTasksCache[currentBedId] || [];
-  list.innerHTML = buildBedTaskGroups(tasks, appState.currentWeek);
+  list.innerHTML = buildBedTaskGroups(tasks, appState.currentWeek, expandedWeeks);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -991,7 +1115,8 @@ function escHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1072,8 +1197,13 @@ async function loadAndRenderFertiliser() {
     fertiliserState = await fetchJSON('/api/fertiliser');
     renderFertiliser();
   } catch (e) {
-    document.getElementById('tab-fertiliser').innerHTML =
-      `<div class="empty-state" style="padding:32px">Failed to load: ${e.message}</div>`;
+    const tab = document.getElementById('tab-fertiliser');
+    tab.textContent = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'empty-state';
+    wrap.style.padding = '32px';
+    wrap.textContent = 'Failed to load: ' + e.message;
+    tab.appendChild(wrap);
   }
 }
 
@@ -1559,13 +1689,7 @@ async function deleteSeedType(id) {
   }
 }
 
-// Fetch helpers for admin (POST/PUT/DELETE with JSON)
-async function postJSON(url, body) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const json = await r.json();
-  if (!r.ok) throw new Error(json.error || r.statusText);
-  return json;
-}
+// Fetch helpers for admin (PUT/DELETE with JSON). postJSON is defined above.
 async function putJSON(url, body) {
   const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const json = await r.json();
@@ -1590,13 +1714,25 @@ async function init() {
     appState = await fetchJSON('/api/state');
     renderDashboard();
   } catch (e) {
-    document.getElementById('tab-dashboard').innerHTML =
-      `<div class="loading-screen">
-        <div style="font-size:36px">🌿</div>
-        <div style="font-weight:700;font-size:16px">Could not connect to server</div>
-        <div style="font-size:13px;color:#aaa;margin-top:4px">${e.message}</div>
-        <button onclick="init()" style="margin-top:16px;background:var(--green-dark);color:#fff;border:none;border-radius:20px;padding:10px 24px;font-size:14px;cursor:pointer">Retry</button>
-      </div>`;
+    const tab = document.getElementById('tab-dashboard');
+    tab.textContent = '';
+    const screen = document.createElement('div');
+    screen.className = 'loading-screen';
+    const icon = document.createElement('div');
+    icon.style.fontSize = '36px';
+    icon.textContent = '🌿';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-weight:700;font-size:16px';
+    title.textContent = 'Could not connect to server';
+    const detail = document.createElement('div');
+    detail.style.cssText = 'font-size:13px;color:#aaa;margin-top:4px';
+    detail.textContent = e.message;
+    const btn = document.createElement('button');
+    btn.style.cssText = 'margin-top:16px;background:var(--green-dark);color:#fff;border:none;border-radius:20px;padding:10px 24px;font-size:14px;cursor:pointer';
+    btn.textContent = 'Retry';
+    btn.onclick = init;
+    screen.append(icon, title, detail, btn);
+    tab.appendChild(screen);
   }
 }
 
