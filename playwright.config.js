@@ -6,6 +6,7 @@ const TEST_PORT = 3001;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
 
 module.exports = defineConfig({
+  globalSetup: './tests/e2e/global-setup.js',
   testDir: './tests/e2e',
   timeout: 30_000,
   expect: { timeout: 8_000 },
