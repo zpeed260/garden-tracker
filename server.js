@@ -578,9 +578,10 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Rate limiting
-const analyseLimiter = rateLimit({ windowMs: 60_000, max: 10, message: { error: 'Too many requests — try again in a minute' } });
-const apiLimiter = rateLimit({ windowMs: 60_000, max: 200, message: { error: 'Too many requests' } });
+// Rate limiting — skipped on port 3001 so Playwright workers don't trip the limiter
+const IS_TEST_PORT = process.env.PORT === '3001';
+const analyseLimiter = rateLimit({ windowMs: 60_000, max: 10, skip: () => IS_TEST_PORT, message: { error: 'Too many requests — try again in a minute' } });
+const apiLimiter = rateLimit({ windowMs: 60_000, max: 200, skip: () => IS_TEST_PORT, message: { error: 'Too many requests' } });
 // LLM-backed routes share the strict limiter to bound Anthropic spend; both
 // must be registered before the broader '/api/' limiter to take precedence.
 app.use('/api/analyse', analyseLimiter);

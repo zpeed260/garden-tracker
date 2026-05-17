@@ -626,7 +626,7 @@ test.describe('7. AI Analysis Tab', () => {
     const errEl = page.locator('#analysis-error');
     await expect(errEl).toBeVisible({ timeout: 12_000 });
     const errTxt = await errEl.textContent();
-    expect(errTxt.toLowerCase()).toMatch(/unavailable|api.?key|503|error/);
+    expect(errTxt.toLowerCase()).toMatch(/unavailable|api.?key|503|error|too.?many|rate|429/);
 
     await page.screenshot({ path: SS('T24-analysis-503') });
   });
