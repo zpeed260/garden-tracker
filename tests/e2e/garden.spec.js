@@ -283,6 +283,9 @@ test.describe('3. Beds Tab', () => {
     await page.goto('/');
     await waitForAppReady(page);
     await goToBeds(page);
+    // Bed 5 is always sowed — navigate there to ensure week groups are present
+    await page.locator('.bed-pill-btn[data-bed-id="bed5"]').click();
+    await page.waitForSelector('#bed-tasks-list .week-group', { timeout: 8_000 });
 
     const groups = page.locator('#bed-detail .week-group');
     const groupCount = await groups.count();
@@ -427,8 +430,10 @@ test.describe('5. Task Interaction', () => {
     await page.goto('/');
     await waitForAppReady(page);
 
-    // Go to the Beds tab — week 1 tasks are always incomplete at season start
+    // Go to Bed 5 — always sowed, week 1 tasks are incomplete after a test reset
     await goToBeds(page);
+    await page.locator('.bed-pill-btn[data-bed-id="bed5"]').click();
+    await page.waitForSelector('#bed-tasks-list .week-group', { timeout: 8_000 });
 
     // Expand week 1 (it may already be expanded; click the header to be safe if collapsed)
     const week1Group = page.locator('#wg-1');
@@ -851,6 +856,12 @@ test.describe('11. API Contracts', () => {
 
     // Task summary
     expect(typeof body.taskSummary).toBe('object');
+
+    // Each bed exposes sow_date and bed_week (Tasks 2 & 4)
+    for (const bed of body.beds) {
+      expect('sow_date' in bed).toBe(true);
+      expect('bed_week' in bed).toBe(true);
+    }
   });
 
   test('T33 GET /api/fertiliser — bedStatus (5 beds), upcoming (8 weeks)', async ({ request }) => {
@@ -927,6 +938,90 @@ test.describe('11. API Contracts', () => {
     expect(undone.status()).toBe(200);
     const uBody = await undone.json();
     expect(uBody.is_complete).toBe(0);
+  });
+
+  test('T38-pre bed5 has lettuce plants sowed 2026-05-17', async ({ request }) => {
+    const res = await request.get('/api/beds');
+    const beds = await res.json();
+    const bed5 = beds.find(b => b.id === 'bed5');
+    expect(bed5).toBeDefined();
+    expect(bed5.name).toMatch(/[Ll]ettuce/);
+    expect(bed5.plants.every(p => p.name === 'Lettuce')).toBe(true);
+    expect(bed5.plants[0].planted_date).toBe('2026-05-17');
+    expect(bed5.sown_count).toBe(bed5.total_count);
+  });
+
+  test('T39 GET /api/beds — each bed exposes sow_date and bed_week', async ({ request }) => {
+    const res = await request.get('/api/beds');
+    const beds = await res.json();
+    for (const bed of beds) {
+      expect('sow_date' in bed).toBe(true);
+      expect('bed_week' in bed).toBe(true);
+    }
+    const bed5 = beds.find(b => b.id === 'bed5');
+    expect(bed5.sow_date).toBe('2026-05-17');
+    expect(typeof bed5.bed_week).toBe('number');
+    expect(bed5.bed_week).toBeGreaterThanOrEqual(1);
+  });
+
+  test('T43 PUT /api/beds/bed5/sow-date — updates all plant planted_dates', async ({ request }) => {
+    const res = await request.put('/api/beds/bed5/sow-date', {
+      data: { date: '2026-05-10' },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.sow_date).toBe('2026-05-10');
+
+    const bedsRes = await request.get('/api/beds');
+    const beds = await bedsRes.json();
+    const bed5 = beds.find(b => b.id === 'bed5');
+    expect(bed5.sow_date).toBe('2026-05-10');
+    expect(bed5.plants.every(p => p.planted_date === '2026-05-10')).toBe(true);
+  });
+
+});
+
+// ─── 12. Per-bed Week Clock ──────────────────────────────────────────────────
+
+test.describe('12. Per-bed Week Clock', () => {
+
+  test.beforeAll(async ({ request }) => {
+    // Restore deterministic sow state: bed1-4 unsowed, bed5 sowed 2026-05-17
+    await request.post('/api/test/reset');
+  });
+
+  test('T40 unsowed bed shows not-sowed placeholder, zero week groups', async ({ page }) => {
+    await page.goto('/');
+    await waitForAppReady(page);
+    await goToBeds(page);
+    // After reset, bed1 has no planted_date — task list shows placeholder
+    const placeholder = page.locator('#bed-tasks-list .not-sowed-placeholder');
+    await expect(placeholder).toBeVisible();
+    const weekGroups = page.locator('#bed-tasks-list .week-group');
+    await expect(weekGroups).toHaveCount(0);
+  });
+
+  test('T41 bed5 task accordion shows week 1 as current-week (sowed today)', async ({ page }) => {
+    await page.goto('/');
+    await waitForAppReady(page);
+    await goToBeds(page);
+    await page.locator('.bed-pill-btn[data-bed-id="bed5"]').click();
+    await page.waitForSelector('#bed-tasks-list .week-group', { timeout: 8_000 });
+    const wg1 = page.locator('#wg-1');
+    await expect(wg1).toBeVisible();
+    await expect(wg1).toHaveClass(/current-week/);
+    await expect(wg1).toHaveClass(/expanded/);
+  });
+
+  test('T42 harvest countdown — sowed crop shows a month name in the countdown', async ({ page }) => {
+    await page.goto('/');
+    await waitForAppReady(page);
+    await goToBeds(page);
+    await page.locator('.bed-pill-btn[data-bed-id="bed5"]').click();
+    await page.waitForSelector('.harvest-countdown', { timeout: 8_000 });
+    const card = page.locator('.harvest-card').first();
+    await expect(card).toContainText(/Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/);
   });
 
 });

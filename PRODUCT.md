@@ -40,3 +40,46 @@ Logical, practical, unpretentious. The tone of a knowledgeable friend who's been
 ## Accessibility & Inclusion
 
 Primary use case is outdoors in bright sunlight on a mobile phone. High contrast ratios are non-negotiable — minimum WCAG AA, targeting AAA for critical text (task titles, bed names, stage labels). Touch targets minimum 44x44px everywhere. No reliance on color alone to convey status — always pair with text or icon.
+
+---
+
+## Task Scheduling
+
+### Sow-date-relative weeks
+
+Tasks are scheduled relative to each bed's sow date, not the global season calendar. The first time any plant in a bed is marked as sown, the bed's task clock starts at Week 1. Week 2 begins 7 days after sowing, Week 3 after 14 days, and so on.
+
+Before any plant in a bed is sowed, the bed's task list shows a "not yet sowed" state — no tasks are presented because there is nothing to track yet.
+
+### What "current week" means per bed
+
+For a given bed:
+- **Current week** = `floor((today − sow_date) / 7) + 1`, minimum 1 on the sow day itself
+- Tasks whose `week_number` equals the current bed week are this week's tasks (expanded by default)
+- Tasks whose `week_number` is less than the current bed week and are not yet completed are **overdue** — shown at the top of the task list in amber, week by week, until the user marks them done
+- Tasks whose `week_number` is greater than the current bed week are upcoming (collapsed by default)
+
+### Global (cross-bed) tasks
+
+Some tasks apply to all beds — compost prep, fertiliser applications, frost cloth. These are tagged `bed_id = NULL` and are driven by the global season calendar (`SEASON_START`), not per-bed sow dates. They appear on the Dashboard and within each bed's task list at their scheduled global week.
+
+### Task lifecycle
+
+A task is in one of three states:
+- **Pending** — not yet due or due this week
+- **Overdue** — past its scheduled week, not completed
+- **Done** — marked complete by the user
+
+There is no separate "skip" action; marking a task complete is the only way to clear it from the overdue list. Overdue tasks persist and accumulate until resolved. This is intentional — the user should see what was missed.
+
+### Correcting a missed sow date
+
+If a bed was sowed but the app wasn't opened that day, the week clock will be wrong. Once a bed is fully sowed, an "Edit date" button appears next to the sow confirmation. Tapping it shows a date picker (capped at today) that updates the `planted_date` for all plants in the bed — recalculating `bed_week` and the entire task schedule immediately. This corrects overdue calculations retrospectively.
+
+---
+
+## Beds
+
+### Bed 5 — Lettuce (as of 2026-05-17)
+
+Bed 5 was replanted with Lettuce (All Year variety) on 2026-05-17, replacing the previous Spinach/Silverbeet/Kale mix. Two rows run the full length of the bed (2 cols × 8 rows = 16 plants). The bed was sowed on the same day, so its task clock began at Week 1 on 2026-05-17.

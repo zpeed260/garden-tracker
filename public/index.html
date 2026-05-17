@@ -133,6 +133,8 @@ html,body{height:100%;background:var(--cream);font-family:system-ui,-apple-syste
 .week-group-body{background:#fff;border-top:1px solid rgba(0,0,0,0.05)}
 .week-group.collapsed .week-group-body{display:none}
 .week-group.current-week .week-group-header{background:var(--cream-dark)}
+.week-group.overdue-week .week-group-header{background:rgba(212,134,10,0.08)}
+.week-group.overdue-week .week-label{color:var(--amber)}
 .week-group-header:hover{background:var(--cream-dark)}
 .week-group.current-week .week-group-header:hover{background:#ddd8c8}
 button.week-group-header{border:none;width:100%;text-align:left;font:inherit}
@@ -701,8 +703,9 @@ async function loadBedDetail(bedId) {
     bedAnalysisCache[bedId] = analyses;
 
     const bed = appState.beds.find(b => b.id === bedId);
-    const week = appState.currentWeek;
-    const isFrostLocked = bedId === 'bed5' && week < 25;
+    const bedWeek = bed.bed_week ?? null;
+    const globalWeek = appState.currentWeek;
+    const isFrostLocked = bedId === 'bed5' && globalWeek < 25;
 
     document.getElementById('bed-detail').innerHTML = `
       <div class="bed-detail">
@@ -719,7 +722,7 @@ async function loadBedDetail(bedId) {
 
         <div class="tasks-section">
           <div class="section-label">Tasks</div>
-          <div id="bed-tasks-list">${buildBedTaskGroups(tasks, week)}</div>
+          <div id="bed-tasks-list">${buildBedTaskGroups(tasks, bedWeek, globalWeek)}</div>
         </div>
 
         <div class="notes-section">
@@ -932,6 +935,49 @@ async function sowAllInBed(bedId) {
   }
 }
 
+function showSowDateEditor(bedId, currentDate) {
+  const row = document.querySelector('.sow-status-row');
+  if (!row) return;
+  const today = new Date().toISOString().split('T')[0];
+  row.textContent = '';
+  row.insertAdjacentHTML('beforeend', `
+    <span class="sow-text">📅 Sow date:</span>
+    <input type="date" id="sow-date-input" value="${escHtml(currentDate)}" max="${today}"
+           style="font:inherit;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px">
+    <button class="sow-all-btn" onclick="saveSowDate('${escHtml(bedId)}')">Save</button>
+    <button class="sow-all-btn unsow" onclick="reloadBedDetail('${escHtml(bedId)}')">Cancel</button>`);
+}
+
+async function saveSowDate(bedId) {
+  const input = document.getElementById('sow-date-input');
+  if (!input) return;
+  const date = input.value;
+  if (!date) return;
+  try {
+    const res = await fetch('/api/beds/' + bedId + '/sow-date', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      showToast('Failed: ' + (err.error || res.status), true);
+      return;
+    }
+    appState = await fetchJSON('/api/state');
+    bedTasksCache = {};
+    loadBedDetail(bedId);
+    showToast('Sow date updated');
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+function reloadBedDetail(bedId) {
+  bedTasksCache[bedId] = null;
+  loadBedDetail(bedId);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // HARVEST COUNTDOWN
 // ═══════════════════════════════════════════════════════════════
@@ -966,9 +1012,19 @@ function buildHarvestCountdown(bed) {
       msg = `<span class="ready-label">🔔 Ready to harvest!</span>`;
     } else if (soon) {
       cls += ' soon-card';
-      msg = `<span class="soon-label">~${p.days_to_harvest} days to harvest</span>`;
+      let harvestDateLabel = '';
+      if (p.planted_date && p.days_to_harvest > 0) {
+        const harvestTs = new Date(p.planted_date).getTime() + p.harvest_start_day * 86400000;
+        harvestDateLabel = ' · ' + new Date(harvestTs).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+      }
+      msg = `<span class="soon-label">~${p.days_to_harvest} days${harvestDateLabel}</span>`;
     } else if (p.days_to_harvest > 0) {
-      msg = `<span class="days-label">~${p.days_to_harvest} days to harvest</span>`;
+      let harvestDateLabel = '';
+      if (p.planted_date && p.days_to_harvest > 0) {
+        const harvestTs = new Date(p.planted_date).getTime() + p.harvest_start_day * 86400000;
+        harvestDateLabel = ' · ' + new Date(harvestTs).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+      }
+      msg = `<span class="days-label">~${p.days_to_harvest} days${harvestDateLabel}</span>`;
     } else {
       msg = `<span class="ready-label">In harvest window</span>`;
     }
@@ -992,8 +1048,12 @@ function buildSowStatusRow(bed) {
   if (!bed.total_count) return '';
   const remaining = bed.total_count - bed.sown_count;
   if (remaining === 0) {
+    const sowLabel = bed.sow_date
+      ? new Date(bed.sow_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'date unknown';
     return `<div class="sow-status-row">
-      <span class="sow-text all-sown">🌱 All ${bed.total_count} plants sown</span>
+      <span class="sow-text all-sown">🌱 All ${bed.total_count} plants sown — ${sowLabel}</span>
+      <button class="sow-all-btn" onclick="showSowDateEditor('${escHtml(bed.id)}', '${escHtml(bed.sow_date || '')}')">Edit date</button>
     </div>`;
   }
   return `<div class="sow-status-row">
@@ -1006,7 +1066,10 @@ function buildSowStatusRow(bed) {
 // BED TASK GROUPS
 // ═══════════════════════════════════════════════════════════════
 
-function buildBedTaskGroups(tasks, currentWeek, forceExpandedWeeks) {
+function buildBedTaskGroups(tasks, bedWeek, globalWeek, forceExpandedWeeks) {
+  if (bedWeek === null || bedWeek === undefined) {
+    return '<div class="not-sowed-placeholder empty-state">Sow this bed to activate the task schedule</div>';
+  }
   if (!tasks.length) return '<div class="empty-state">No tasks for this bed</div>';
 
   const grouped = {};
@@ -1021,18 +1084,22 @@ function buildBedTaskGroups(tasks, currentWeek, forceExpandedWeeks) {
   return weeks.map(w => {
     const wTasks = grouped[w];
     const done = wTasks.filter(t => t.is_complete).length;
-    const isCurrent = w === currentWeek;
-    // Default: current and future weeks are expanded; past weeks collapsed.
-    // forceExpandedWeeks (a Set) overrides the default so a re-render preserves
-    // any past weeks the user manually expanded.
-    const defaultExpanded = isCurrent || w >= currentWeek;
-    const isExpanded = forceExpandedWeeks
-      ? forceExpandedWeeks.has(w)
-      : defaultExpanded;
 
-    return `<div class="week-group ${isExpanded ? 'expanded' : 'collapsed'} ${isCurrent ? 'current-week' : ''}" id="wg-${w}">
+    // Mixed groups: bed-specific tasks use bedWeek; pure global tasks use globalWeek
+    const hasBedSpecific = wTasks.some(t => t.bed_id !== null);
+    const effectiveWeek = hasBedSpecific ? bedWeek : globalWeek;
+
+    const isCurrent = w === effectiveWeek;
+    const isOverdue = w < effectiveWeek && done < wTasks.length;
+
+    const defaultExpanded = isCurrent || isOverdue || w >= effectiveWeek;
+    const isExpanded = forceExpandedWeeks ? forceExpandedWeeks.has(w) : defaultExpanded;
+
+    const overdueClass = isOverdue ? ' overdue-week' : '';
+
+    return `<div class="week-group ${isExpanded ? 'expanded' : 'collapsed'} ${isCurrent ? 'current-week' : ''}${overdueClass}" id="wg-${w}">
       <button class="week-group-header" onclick="toggleWeekGroup(${w})">
-        <span class="week-label">Week ${w}</span>
+        <span class="week-label">Week ${w}${isOverdue ? ' ⚠' : ''}</span>
         <span class="week-progress">${done}/${wTasks.length} done</span>
         <span class="chevron">${isExpanded ? '▼' : '▶'}</span>
       </button>
@@ -1055,16 +1122,17 @@ function toggleWeekGroup(w) {
 function rerenderBedTasks() {
   const list = document.getElementById('bed-tasks-list');
   if (!list) return;
-  // Capture which week-groups are currently expanded so the user's manual
-  // expand/collapse state survives a re-render (e.g. after toggling a task
-  // inside a past week).
   const expandedWeeks = new Set();
   list.querySelectorAll('.week-group.expanded').forEach((el) => {
     const m = el.id && el.id.match(/^wg-(-?\d+)$/);
     if (m) expandedWeeks.add(parseInt(m[1], 10));
   });
   const tasks = bedTasksCache[currentBedId] || [];
-  list.innerHTML = buildBedTaskGroups(tasks, appState.currentWeek, expandedWeeks);
+  const bed = appState.beds.find(b => b.id === currentBedId);
+  const bedWeek = bed ? (bed.bed_week ?? null) : null;
+  const taskListHtml = buildBedTaskGroups(tasks, bedWeek, appState.currentWeek, expandedWeeks);
+  list.textContent = '';
+  list.insertAdjacentHTML('beforeend', taskListHtml);
 }
 
 // ═══════════════════════════════════════════════════════════════

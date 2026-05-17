@@ -27,7 +27,24 @@ No lint or test scripts are configured yet. There is no build step — the front
 
 **Database.** `better-sqlite3` is used synchronously throughout. The DB file lives at `/app/data/garden.db` (Docker volume) or the `DB_PATH` env var. On first boot (when `beds` table is empty) the server auto-seeds 5 beds, all plants, and a full 21-week task schedule — changing seed data requires either deleting the DB file or writing a migration by hand.
 
-**Week / fertiliser logic.** The season epoch is hardcoded as `SEASON_START = new Date('2026-04-26')`. `getCurrentWeek()` computes weeks elapsed since that date. Fertiliser alternates by week parity: odd weeks → "Vasili's Liquid Gold", even → "Vasili's Eco Booch".
+**Week / fertiliser logic.** There are two distinct week clocks:
+
+1. **Global season week** — `SEASON_START = new Date('2026-04-26')`. `getCurrentWeek()` computes weeks elapsed since that date. Used for: fertiliser rotation, dashboard global tasks (bed_id = NULL).
+   - Fertiliser alternates by week parity: odd → "Vasili's Liquid Gold", even → "Vasili's Eco Booch".
+
+2. **Per-bed sow week** — each bed computes its own current week from `MIN(planted_date)` across its plants.
+   - `sow_date = MIN(planted_date)` across a bed's plants (null if none sowed yet)
+   - `bed_week = Math.max(1, Math.floor((now - sow_date) / WEEK_MS) + 1)` — equals 1 on the sow day itself
+   - Exposed on every bed object as `sow_date` and `bed_week`
+   - Bed-specific tasks (`bed_id IS NOT NULL`) use `bed_week` for current/overdue/future classification
+   - Global tasks (`bed_id IS NULL`) continue to use the global season week on the dashboard; when shown inside a bed's task list they are classified against the global season week
+
+**Sow date correction.** `PUT /api/beds/:bedId/sow-date` with body `{ date: 'YYYY-MM-DD' }` updates `planted_date` for every plant in the bed. Validates ISO date format and rejects future dates. The frontend shows an "Edit date" button in `buildSowStatusRow()` once all plants are sowed; `saveSowDate()` calls this endpoint and refreshes `appState.beds` from `/api/state`.
+
+**Task classification.** In the Beds tab, `buildBedTaskGroups(tasks, bedWeek, globalWeek)` separates tasks:
+- `task.bed_id !== null` → classified using `bedWeek` (current when `week_number === bedWeek`, overdue when `week_number < bedWeek && !is_complete`)
+- `task.bed_id === null` → classified using `globalWeek`
+- When `bedWeek` is null (bed not yet sowed) the task list shows a "not yet sowed" placeholder instead of task groups.
 
 **Plant stage computation.** Each plant row stores a `stage_thresholds` JSON column (e.g. `{"GERMINATING":7,"SEEDLING":21,...}`). `computeStage()` in `server.js` walks a fixed priority list (`OVERDUE → HARVEST_READY → ... → SEEDED`) and returns the first stage whose threshold the plant's age meets. Stage is recomputed on every request — it is never persisted.
 

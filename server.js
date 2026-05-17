@@ -342,6 +342,66 @@ if (bedCount === 0) {
   insertTask.run(21, null,  'Begin fortnightly Eco Booch on all spring crops', 0, null);
 }
 
+// ─── Migration: Bed 5 → Lettuce (sowed 2026-05-17) ──────────────────────────
+(function migrateBed5Lettuce() {
+  const existing = db.prepare(
+    "SELECT COUNT(*) as c FROM plants WHERE bed_id='bed5' AND name='Lettuce'"
+  ).get();
+  if (existing.c > 0) return;
+
+  db.prepare("DELETE FROM plants WHERE bed_id = 'bed5'").run();
+  db.prepare("UPDATE beds SET name = 'Bed 5 — Lettuce' WHERE id = 'bed5'").run();
+  db.prepare("DELETE FROM tasks WHERE bed_id = 'bed5'").run();
+
+  const lettuce_thresholds = JSON.stringify({
+    GERMINATING: 7, SEEDLING: 14, GROWING: 30, HARVEST_READY: 55, OVERDUE: 200,
+  });
+  const insertPlant = db.prepare(
+    `INSERT INTO plants
+       (bed_id, name, variety, grid_col, grid_row, planted_date,
+        harvest_start_day, harvest_end_day, stage_thresholds)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (let col = 0; col <= 1; col++) {
+    for (let row = 0; row <= 7; row++) {
+      insertPlant.run('bed5', 'Lettuce', 'All Year', col, row, '2026-05-17', 56, 9999, lettuce_thresholds);
+    }
+  }
+
+  const insertTask = db.prepare(
+    `INSERT INTO tasks (week_number, bed_id, title, is_complete, completed_at)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  const TODAY = '2026-05-17T00:00:00.000Z';
+  insertTask.run(1, 'bed5', 'Sow lettuce in 2 rows, 20cm spacing', 1, TODAY);
+  insertTask.run(2, 'bed5', 'Check germination — resow any bare patches', 0, null);
+  insertTask.run(3, 'bed5', 'Thin lettuce seedlings to 20cm apart', 0, null);
+  insertTask.run(5, 'bed5', 'Apply snail bait around Bed 5', 0, null);
+  insertTask.run(6, 'bed5', 'Begin harvesting outer leaves — cut-and-come-again', 0, null);
+  for (let w = 7; w <= 20; w++) {
+    insertTask.run(w, 'bed5', 'Ongoing cut-and-come-again lettuce harvest', 0, null);
+  }
+  console.log('[migration] Bed 5 replanted with Lettuce (sowed 2026-05-17)');
+})();
+
+// ─── Migration: Bed 1 — sync beetroot sow date to cauliflower date ───────────
+(function migrateBed1BeetrootSowDate() {
+  const unsowed = db.prepare(
+    "SELECT COUNT(*) as c FROM plants WHERE bed_id='bed1' AND planted_date IS NULL"
+  ).get();
+  if (unsowed.c === 0) return;
+
+  const ref = db.prepare(
+    "SELECT planted_date FROM plants WHERE bed_id='bed1' AND planted_date IS NOT NULL LIMIT 1"
+  ).get();
+  if (!ref) return;
+
+  db.prepare(
+    "UPDATE plants SET planted_date = ? WHERE bed_id = 'bed1' AND planted_date IS NULL"
+  ).run(ref.planted_date);
+  console.log('[migration] Bed 1 beetroot sow date synced to:', ref.planted_date);
+})();
+
 // ─── Seed types — seeded separately so they survive DB resets ─────────────────
 
 const seedTypesCount = db.prepare('SELECT COUNT(*) as cnt FROM seed_types').get().cnt;
@@ -529,6 +589,19 @@ function enrichBed(bed) {
     };
   });
   const sown_count = plants.filter((p) => p.sown).length;
+
+  const sownDates = plants
+    .filter(p => p.planted_date)
+    .map(p => p.planted_date.split('T')[0]);
+  const sow_date = sownDates.length
+    ? sownDates.reduce((min, d) => (d < min ? d : min), sownDates[0])
+    : null;
+
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const bed_week = sow_date
+    ? Math.max(1, Math.floor((Date.now() - new Date(sow_date).getTime()) / WEEK_MS) + 1)
+    : null;
+
   return {
     id: bed.id,
     name: bed.name,
@@ -537,6 +610,8 @@ function enrichBed(bed) {
     plants,
     sown_count,
     total_count: plants.length,
+    sow_date,
+    bed_week,
   };
 }
 
@@ -624,11 +699,19 @@ if ((process.env.DB_PATH || '').includes('test')) {
   const resetTasks = db.prepare(
     'UPDATE tasks SET is_complete = 0, completed_at = NULL WHERE week_number > 0'
   );
+  const resetPlantedDates = db.prepare(
+    "UPDATE plants SET planted_date = NULL WHERE bed_id IN ('bed1','bed2','bed3','bed4')"
+  );
+  const restoreBed5SowDate = db.prepare(
+    "UPDATE plants SET planted_date = '2026-05-17' WHERE bed_id = 'bed5'"
+  );
   app.post('/api/test/reset', (_req, res) => {
-    db.exec('DELETE FROM fertiliser_log');
-    db.exec('DELETE FROM notes');
+    db.prepare('DELETE FROM fertiliser_log').run();
+    db.prepare('DELETE FROM notes').run();
     deleteExtraSeedTypes.run();
     resetTasks.run();
+    resetPlantedDates.run();
+    restoreBed5SowDate.run();
     res.json({ ok: true });
   });
 }
@@ -723,6 +806,23 @@ app.post('/api/beds/:bed_id/sow-all', (req, res) => {
   const stamped_at = new Date().toISOString();
   const result = sowAllUnsownInBed.run(stamped_at, bed_id);
   res.json({ bed_id, sown_now: result.changes, stamped_at });
+});
+
+// PUT /api/beds/:bedId/sow-date — retroactively set the sow date for all plants in a bed.
+const updateBedSowDate = db.prepare('UPDATE plants SET planted_date = ? WHERE bed_id = ?');
+app.put('/api/beds/:bedId/sow-date', (req, res) => {
+  const { bedId } = req.params;
+  if (!isValidBedId(bedId)) return res.status(400).json({ error: 'Invalid bed id' });
+  const { date } = req.body || {};
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+  const parsed = new Date(date);
+  if (isNaN(parsed.getTime()) || parsed > new Date()) {
+    return res.status(400).json({ error: 'date must be a valid past date' });
+  }
+  updateBedSowDate.run(date, bedId);
+  res.json({ ok: true, sow_date: date });
 });
 
 // GET /api/fertiliser
